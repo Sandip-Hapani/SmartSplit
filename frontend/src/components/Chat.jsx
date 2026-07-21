@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { UI } from '../icons'
 
 const POLL_MS = 5000
 
@@ -60,7 +62,9 @@ export default function Chat({ friend, onBack }) {
     <div className="page chat-page">
       <div className="card chat-card">
         <div className="chat-head">
-          <button className="ghost" onClick={onBack}>← Back</button>
+          <button className="ghost" onClick={onBack}>
+            <FontAwesomeIcon icon={UI.back} /> Back
+          </button>
           <div className="row" style={{ gap: 8 }}>
             {friend.avatar_url
               ? <img className="avatar" src={friend.avatar_url} alt="" />
@@ -91,7 +95,9 @@ export default function Chat({ friend, onBack }) {
         <form className="chat-compose" onSubmit={send}>
           <input value={draft} placeholder="Write a message…" maxLength={2000}
                  onChange={(e) => setDraft(e.target.value)} />
-          <button disabled={sending || !draft.trim()}>Send</button>
+          <button disabled={sending || !draft.trim()} aria-label="Send message">
+            <FontAwesomeIcon icon={UI.send} />
+          </button>
         </form>
         <p className="muted" style={{ margin: '6px 0 0' }}>Text only — no attachments.</p>
       </div>

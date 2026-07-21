@@ -14,6 +14,10 @@
   --notice-bg: #eff6ff;
   --notice-ink: #1e40af;
   --warn-bg: #fef3c7;
+  --tone-add: #0b7a5c;    --tone-add-bg: #e7f6f0;
+  --tone-danger: #b91c1c; --tone-danger-bg: #fdeaea;
+  --tone-edit: #a16207;   --tone-edit-bg: #fdf3da;
+  --tone-money: #1c5cab;  --tone-money-bg: #e8f1fd;
   --radius: 10px;
 }
 :root[data-theme="dark"] {
@@ -32,6 +36,10 @@
   --notice-bg: #12263f;
   --notice-ink: #93c5fd;
   --warn-bg: #3a2f12;
+  --tone-add: #34d3a6;    --tone-add-bg: #10312a;
+  --tone-danger: #f87171; --tone-danger-bg: #3a1d1d;
+  --tone-edit: #fbbf24;   --tone-edit-bg: #382c10;
+  --tone-money: #6da7ec;  --tone-money-bg: #14283f;
 }
 * { box-sizing: border-box; }
 body {
@@ -208,6 +216,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 .mainnav a:hover { color: var(--ink); }
 .mainnav a.active { color: var(--brand-dark); border-bottom-color: var(--brand); }
 .tabicon { font-size: 16px; }
+.mainnav a.active .tabicon { color: var(--brand); }
 
 .avatar {
   width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
@@ -242,7 +251,18 @@ button.ghost.danger { color: var(--red); }
 .activity-row.undone .act-body > div:first-child {
   text-decoration: line-through; color: var(--muted);
 }
-.act-icon { font-size: 16px; line-height: 1.4; }
+/* Icon colour follows the action: creation green, destruction red,
+   edits amber, everything else muted ink. */
+.act-icon {
+  font-size: 15px; line-height: 1.5; width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; flex: 0 0 auto; margin-top: 1px;
+}
+.act-icon.tone-add     { color: var(--tone-add);     background: var(--tone-add-bg); }
+.act-icon.tone-danger  { color: var(--tone-danger);  background: var(--tone-danger-bg); }
+.act-icon.tone-edit    { color: var(--tone-edit);    background: var(--tone-edit-bg); }
+.act-icon.tone-money   { color: var(--tone-money);   background: var(--tone-money-bg); }
+.act-icon.tone-neutral { color: var(--muted);        background: var(--subtle); }
 .act-body { flex: 1; min-width: 0; }
 
 /* ---------------------------------------------------------- whiteboard */
@@ -385,3 +405,28 @@ button.ghost.danger { color: var(--red); }
 .data-table th, .data-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .data-table th { color: var(--muted); font-weight: 600; }
 .data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------- expense timeline & payment rows */
+.month-head {
+  margin: 18px 0 4px; font-size: 13px; font-weight: 700;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+}
+.month-head:first-child { margin-top: 4px; }
+
+/* A settlement is a notice about money moving, not an editable entry —
+   flatter, quieter, and without the amount column or row actions. */
+.payment-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; margin: 4px 0;
+  background: var(--tone-money-bg); border-radius: 8px;
+  font-size: 14px; color: var(--ink);
+}
+.pay-date {
+  flex: 0 0 auto; width: 48px; font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pay-icon { color: var(--tone-money); font-size: 14px; }
+.pay-text { flex: 1; min-width: 0; }
+.payment-row .pill { background: transparent; color: var(--tone-money); }
+.expense-row .ex-main { flex: 1; min-width: 0; }
+.expense-row { gap: 10px; }

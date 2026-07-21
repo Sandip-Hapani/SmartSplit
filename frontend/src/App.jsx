@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { clearSession, getUser, setSession, getToken } from './api'
+import { TAB_ICONS } from './icons'
 import LoginPage from './pages/LoginPage'
 import GroupsPage from './pages/GroupsPage'
 import GroupPage from './pages/GroupPage'
@@ -9,10 +11,10 @@ import ActivityPage from './pages/ActivityPage'
 import AccountPage from './pages/AccountPage'
 
 const TABS = [
-  { to: '/groups', label: 'Groups', icon: '👥' },
-  { to: '/friends', label: 'Friends', icon: '🙋' },
-  { to: '/activity', label: 'Activity', icon: '🕘' },
-  { to: '/account', label: 'Account', icon: '⚙️' },
+  { to: '/groups', label: 'Groups', icon: TAB_ICONS.groups },
+  { to: '/friends', label: 'Friends', icon: TAB_ICONS.friends },
+  { to: '/activity', label: 'Activity', icon: TAB_ICONS.activity },
+  { to: '/account', label: 'Account', icon: TAB_ICONS.account },
 ]
 
 /** Applies the saved theme; "system" follows the OS setting. */
@@ -68,7 +70,7 @@ export default function App() {
             {TABS.map((t) => (
               <NavLink key={t.to} to={t.to}
                        className={({ isActive }) => (isActive ? 'active' : '')}>
-                <span className="tabicon" aria-hidden="true">{t.icon}</span>
+                <FontAwesomeIcon icon={t.icon} className="tabicon" fixedWidth />
                 <span>{t.label}</span>
               </NavLink>
             ))}

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, fmt, getToken } from '../api'
 import SpendChart from './SpendChart'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { UI } from '../icons'
 
 /** Downloads via fetch so the Authorization header is sent. */
 async function downloadCsv(path, fallbackName) {
@@ -73,7 +75,7 @@ export default function Insights({ groupId }) {
           {groupId ? ' in this group' : ' across all your groups'}.
         </p>
         <button className="secondary" onClick={exportCsv} disabled={busy}>
-          {busy ? 'Preparing…' : '⬇ Export CSV'}
+          {busy ? 'Preparing…' : <><FontAwesomeIcon icon={UI.download} /> Export CSV</>}
         </button>
       </div>
       {error && <div className="error">{error}</div>}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
 import { api } from '../api'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { UI } from '../icons'
 
 /** Add by search, or by pointing the camera at someone's SmartSplit QR code. */
 export default function AddFriend({ onClose, onDone }) {
@@ -37,7 +39,9 @@ export default function AddFriend({ onClose, onDone }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="row spread">
-          <h3 style={{ margin: 0 }}>Add a friend</h3>
+          <h3 style={{ margin: 0 }}>
+            <FontAwesomeIcon icon={UI.addFriend} /> Add a friend
+          </h3>
           <button className="ghost" onClick={onClose}>✕</button>
         </div>
 

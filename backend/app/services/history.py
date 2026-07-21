@@ -175,7 +175,10 @@ def undo(db: Session, entry: models.Activity, actor: models.User) -> models.Acti
         raise HTTPException(400, "This kind of activity can't be undone.")
 
     entry.undone = True
-    reversal = log(db, gid, actor.id, "undo", description,
+    # Removing a member is its own user-facing action, not a generic reversal,
+    # so it gets its own type (and therefore its own icon) in the feed.
+    reversal_type = "member_removed" if entry.type == "member_added" else "undo"
+    reversal = log(db, gid, actor.id, reversal_type, description,
                    {"undid_activity_id": entry.id, "undid_type": entry.type})
     reversal.undo_of_id = entry.id
     db.flush()
