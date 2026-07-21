@@ -1,16 +1,15 @@
-# One-click deploy on Render's free tier.
+# One-click deploy on Render's free tier, backed by an external Neon Postgres.
 #
-#   1. Push this repo to GitHub
-#   2. render.com → New → Blueprint → pick the repo
-#   3. Fill in the values Render marks as required (see below)
+#   1. Create a free project at neon.tech and copy its connection string
+#   2. render.com → New → Blueprint → pick this repo, branch main
+#   3. Paste the Neon string into DATABASE_URL when Render asks (see note below)
 #
 # The free web service sleeps after ~15 minutes idle and takes roughly a minute
 # to wake, which is fine for a test instance — say so in your README so testers
 # don't file "the site is slow" issues.
 #
-# Render's free Postgres expires after 30 days. For something longer-lived,
-# delete the `databases:` block and point DATABASE_URL at a free Neon project
-# (neon.tech) instead — that one doesn't expire.
+# Why Neon and not Render's own database: Render's free Postgres is deleted after
+# 30 days. Neon's free tier does not expire, so the data survives.
 
 services:
   - type: web
@@ -20,10 +19,12 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
+      # Paste your Neon connection string here in the Render dashboard. Neon
+      # gives you a "postgresql://..." URL — change the prefix to
+      # "postgresql+psycopg://..." so SQLAlchemy uses the installed driver, and
+      # keep the "?sslmode=require" that Neon appends.
       - key: DATABASE_URL
-        fromDatabase:
-          name: smartsplit-db
-          property: connectionString
+        sync: false
       - key: SMARTSPLIT_ENV
         value: production
       # generated once by Render and kept secret; never commit a real one
@@ -50,9 +51,3 @@ services:
       # uploads spend your Groq quota.
       - key: GROQ_API_KEY
         sync: false
-
-databases:
-  - name: smartsplit-db
-    plan: free
-    databaseName: smartsplit
-    user: smartsplit
