@@ -323,3 +323,65 @@ button.ghost.danger { color: var(--red); }
   .topbar { padding: 10px 14px; }
   .page { margin: 16px auto; }
 }
+
+/* ---------------------------------------------------------- stat tiles */
+.stat-row {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+}
+.stat-tile {
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px 16px;
+}
+.stat-label { font-size: 13px; color: var(--muted); }
+.stat-value { font-size: 26px; font-weight: 700; margin-top: 2px; }
+.stat-tile.hero .stat-value { font-size: 34px; }
+.stat-sub { margin-top: 2px; }
+
+/* ---------------------------------------------------------- spending chart
+   Categorical slots 1 (blue) and 2 (green). Both modes are selected steps,
+   validated for CVD against this app's card surfaces — not an automatic flip. */
+.chart-block {
+  --series-1: #2a78d6;
+  --series-2: #008300;
+  --grid: var(--line);
+  --axis-ink: var(--muted);
+}
+:root[data-theme="dark"] .chart-block {
+  --series-1: #3987e5;
+  --series-2: #008300;
+}
+.chart-head { align-items: flex-start; }
+.chart-legend { display: flex; gap: 14px; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.key.s1 { background: var(--series-1); }
+.key.s2 { background: var(--series-2); }
+
+.chart-wrap { position: relative; margin-top: 10px; }
+.spend-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.spend-chart .grid { stroke: var(--grid); stroke-width: 1; }
+.spend-chart .baseline { stroke: var(--line); stroke-width: 1.5; }
+.spend-chart .axis { fill: var(--axis-ink); font-size: 11px; }
+.spend-chart .axis.strong { fill: var(--ink); font-weight: 600; }
+.spend-chart .bar-label { fill: var(--ink); font-size: 11px; font-weight: 600; }
+.spend-chart path.s1 { fill: var(--series-1); }
+.spend-chart path.s2 { fill: var(--series-2); }
+.spend-chart .hit { fill: transparent; }
+.spend-chart .hit.on { fill: var(--subtle); opacity: .5; }
+
+.chart-tip {
+  position: absolute; top: 4px; transform: translateX(-50%);
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 11px; font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.14); pointer-events: none; white-space: nowrap;
+}
+.chart-tip div { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.chart-tip b { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+.chart-empty { position: absolute; inset: 0; display: grid; place-items: center; }
+
+.table-scroll { overflow-x: auto; margin-top: 10px; }
+.data-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.data-table th, .data-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.data-table th { color: var(--muted); font-weight: 600; }
+.data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }

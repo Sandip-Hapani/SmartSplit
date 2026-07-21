@@ -1,11 +1,13 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user, require_membership
 from ..database import get_db
+from ..services import reports
 from ..services.history import UNDOABLE, log, undo
 from ..services.simplify import compute_balances, direct_debts, simplify_debts
 
@@ -193,6 +195,30 @@ def undo_activity(group_id: int, activity_id: int,
     db.commit()
     db.refresh(reversal)
     return _activity_out(reversal, group.name)
+
+
+# ---------------------------------------------------------------- reports
+
+@router.get("/{group_id}/stats", response_model=schemas.SpendStats,
+            summary="Spending totals and a 12-month series for this group")
+def group_stats(group_id: int, user: models.User = Depends(get_current_user),
+                db: Session = Depends(get_db)):
+    require_membership(db, group_id, user)
+    return reports.build_stats(db, [group_id], user.id)
+
+
+@router.get("/{group_id}/expenses.csv", response_class=PlainTextResponse,
+            summary="Download this group's expenses as CSV")
+def group_expenses_csv(group_id: int, user: models.User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    group = require_membership(db, group_id, user)
+    body = reports.expenses_csv(db, [group_id], user.id)
+    safe = "".join(c if c.isalnum() or c in "-_ " else "_" for c in group.name).strip() or "group"
+    return PlainTextResponse(
+        "﻿" + body,  # BOM so Excel reads UTF-8 accents correctly
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="smartsplit-{safe}.csv"'},
+    )
 
 
 # ---------------------------------------------------------------- whiteboard

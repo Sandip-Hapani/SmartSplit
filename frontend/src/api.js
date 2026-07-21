@@ -101,6 +101,9 @@ export const api = {
   undoActivity: (id, actId) =>
     request(`/api/groups/${id}/activity/${actId}/undo`, { method: 'POST' }),
 
+  groupStats: (id) => request(`/api/groups/${id}/stats`),
+  accountStats: () => request('/api/account/stats'),
+
   myActivity: () => request('/api/activity'),
 
   friends: () => request('/api/friends'),

@@ -30,7 +30,11 @@ export default function BillUpload({ group, user, onClose, onSaved }) {
         ...it,
         included: new Set(group.members.map((m) => m.id)),
       })))
-      setDescription(parsed.store ? `Groceries – ${parsed.store}` : file.name)
+      // Prefix the receipt's own date so bill-created entries are identifiable
+      // in the list and in exports, even when several bills share a store.
+      const billDate = parsed.date || date
+      const label = parsed.store || file.name.replace(/\.[^.]+$/, '')
+      setDescription(`${billDate} ${label}`)
       if (parsed.date) setDate(parsed.date)
       setStage('assign')
       if (parsed.items.length === 0) {

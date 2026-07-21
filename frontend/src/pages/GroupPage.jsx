@@ -8,6 +8,7 @@ import RecurringTab from '../components/RecurringTab'
 import ActivityList from '../components/ActivityList'
 import Whiteboard from '../components/Whiteboard'
 import GroupSettings from '../components/GroupSettings'
+import Insights from '../components/Insights'
 
 export default function GroupPage({ user }) {
   const { groupId } = useParams()
@@ -106,7 +107,7 @@ export default function GroupPage({ user }) {
 
       <div className="card">
         <div className="tabs">
-          {['expenses', 'balances', 'whiteboard', 'activity', 'recurring', 'settings'].map((t) => (
+          {['expenses', 'balances', 'insights', 'whiteboard', 'activity', 'recurring', 'settings'].map((t) => (
             <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
               {t[0].toUpperCase() + t.slice(1)}
             </button>
@@ -199,6 +200,8 @@ export default function GroupPage({ user }) {
             </>}
           </>
         )}
+
+        {tab === 'insights' && <Insights groupId={groupId} />}
 
         {tab === 'whiteboard' && <Whiteboard groupId={groupId} user={user} />}
 

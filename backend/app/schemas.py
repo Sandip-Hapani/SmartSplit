@@ -300,6 +300,31 @@ class RecurringOut(BaseModel):
     active: bool
 
 
+# ---------- spending stats ----------
+
+class MonthPoint(BaseModel):
+    month: str      # YYYY-MM
+    label: str      # Jan, Feb, …
+    year: int
+    total: float    # what the group spent
+    mine: float     # this user's share of it
+    count: int
+
+
+class SpendStats(BaseModel):
+    currency: str = "EUR"
+    expense_count: int = 0
+    all_time_total: float = 0
+    all_time_mine: float = 0
+    this_month_total: float = 0
+    this_month_mine: float = 0
+    this_month_label: str = ""
+    last_month_total: float = 0
+    last_month_mine: float = 0
+    last_month_label: str = ""
+    monthly: list[MonthPoint] = []
+
+
 # ---------- bill parsing ----------
 
 class ParsedItem(BaseModel):
