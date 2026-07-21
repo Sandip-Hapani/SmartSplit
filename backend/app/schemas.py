@@ -96,6 +96,7 @@ class SimpleMessage(BaseModel):
 
 class GroupCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    default_currency: str = "EUR"
 
 
 class GroupOut(BaseModel):
@@ -103,12 +104,14 @@ class GroupOut(BaseModel):
     name: str
     created_by: Optional[int]
     simplify_debts: bool = True
+    default_currency: str = "EUR"
     members: list[UserOut] = []
 
 
 class GroupUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     simplify_debts: Optional[bool] = None
+    default_currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
 
 
 class AddMember(BaseModel):
@@ -182,17 +185,31 @@ class ItemIn(BaseModel):
     participant_ids: list[int]
 
 
+class PayerIn(BaseModel):
+    user_id: int
+    amount: float = Field(gt=0)
+
+
 class ExpenseCreate(BaseModel):
     description: str
     amount: float = Field(gt=0)
     currency: str = "EUR"
     date: Optional[Date] = None
-    paid_by: int
+    # Either a single `paid_by`, or `payers` when several people put money down.
+    # When both are given, `payers` wins.
+    paid_by: Optional[int] = None
+    payers: list[PayerIn] = []
     split_type: str = "equal"  # equal|exact|percent|shares|itemized
     notes: str = ""
     participant_ids: list[int] = []  # for equal
     splits: list[SplitIn] = []       # for exact/percent/shares
     items: list[ItemIn] = []         # for itemized
+
+
+class PayerOut(BaseModel):
+    user_id: int
+    user_name: str
+    amount: float
 
 
 class SplitOut(BaseModel):
@@ -224,6 +241,7 @@ class ExpenseOut(BaseModel):
     date: Date
     paid_by: int
     payer_name: str
+    payers: list[PayerOut] = []
     split_type: str
     notes: str
     splits: list[SplitOut]
@@ -237,6 +255,7 @@ class SettlementCreate(BaseModel):
     from_user: int
     to_user: int
     amount: float = Field(gt=0)
+    currency: str = "EUR"
     date: Optional[Date] = None
 
 
@@ -247,6 +266,7 @@ class SettlementOut(BaseModel):
     to_user: int
     to_name: str
     amount: float
+    currency: str = "EUR"
     date: Date
 
 
@@ -254,6 +274,7 @@ class BalanceOut(BaseModel):
     user_id: int
     user_name: str
     balance: float  # positive = is owed money, negative = owes
+    currency: str = "EUR"
 
 
 class TransferOut(BaseModel):
@@ -262,6 +283,7 @@ class TransferOut(BaseModel):
     to_user: int
     to_name: str
     amount: float
+    currency: str = "EUR"
 
 
 # ---------- activity ----------
@@ -284,6 +306,7 @@ class ActivityOut(BaseModel):
 class RecurringCreate(BaseModel):
     description: str
     amount: float = Field(gt=0)
+    currency: str = "EUR"
     paid_by: int
     frequency: str = "monthly"  # weekly|monthly
     next_date: Date
@@ -293,11 +316,40 @@ class RecurringOut(BaseModel):
     id: int
     description: str
     amount: float
+    currency: str = "EUR"
     paid_by: int
     payer_name: str
     frequency: str
     next_date: Date
     active: bool
+
+
+# ---------- spending stats ----------
+
+class MonthPoint(BaseModel):
+    month: str      # YYYY-MM
+    label: str      # Jan, Feb, …
+    year: int
+    total: float    # what the group spent
+    mine: float     # this user's share of it
+    count: int
+
+
+class SpendStats(BaseModel):
+    currency: str = "EUR"          # what the totals below are expressed in
+    converted: bool = False        # True when more than one currency was folded in
+    unconverted: list[str] = []    # codes with no usable rate, excluded from totals
+    by_currency: list["CurrencyTotal"] = []   # native, unconverted breakdown
+    expense_count: int = 0
+    all_time_total: float = 0
+    all_time_mine: float = 0
+    this_month_total: float = 0
+    this_month_mine: float = 0
+    this_month_label: str = ""
+    last_month_total: float = 0
+    last_month_mine: float = 0
+    last_month_label: str = ""
+    monthly: list[MonthPoint] = []
 
 
 # ---------- bill parsing ----------
@@ -318,3 +370,37 @@ class ParsedBill(BaseModel):
     valid: bool = False  # items_sum matches total within tolerance
     source: str = "local"  # local | groq
     warnings: list[str] = []
+
+
+# ---------- currencies ----------
+
+class CurrencyOut(BaseModel):
+    code: str
+    symbol: str
+    name: str
+    decimals: int = 2
+
+
+class CurrencyList(BaseModel):
+    currencies: list[CurrencyOut]
+    rates_as_of: Optional[Date] = None
+
+
+class RateOut(BaseModel):
+    base: str
+    quote: str
+    rate: float
+    source: str          # live | manual
+    as_of: Optional[Date] = None
+
+
+class RatePin(BaseModel):
+    base: str = Field(min_length=3, max_length=3)
+    quote: str = Field(min_length=3, max_length=3)
+    rate: float = Field(gt=0)
+
+
+class CurrencyTotal(BaseModel):
+    currency: str
+    total: float
+    mine: float

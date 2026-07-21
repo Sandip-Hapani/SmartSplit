@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, fmt } from '../api'
+import CurrencySelect from './CurrencySelect'
 
 export default function SettleModal({ group, user, transfers, onClose, onSaved }) {
   const suggestion = transfers.find((t) => t.from_user === user.id) || transfers[0]
@@ -8,6 +9,7 @@ export default function SettleModal({ group, user, transfers, onClose, onSaved }
     suggestion?.to_user ?? group.members.find((m) => m.id !== user.id)?.id ?? user.id,
   )
   const [amount, setAmount] = useState(suggestion?.amount ?? '')
+  const [ccy, setCcy] = useState(suggestion?.currency || group.default_currency || 'EUR')
   const [error, setError] = useState('')
 
   const submit = async (e) => {
@@ -16,6 +18,7 @@ export default function SettleModal({ group, user, transfers, onClose, onSaved }
     try {
       await api.settle(group.id, {
         from_user: Number(fromUser), to_user: Number(toUser), amount: parseFloat(amount),
+        currency: ccy,
       })
       onSaved()
     } catch (err) {
@@ -29,7 +32,7 @@ export default function SettleModal({ group, user, transfers, onClose, onSaved }
         <h3>Record a payment</h3>
         {transfers.length > 0 && (
           <p className="muted">
-            Suggested: {transfers.map((t) => `${t.from_name} → ${t.to_name} ${fmt(t.amount)}`).join(' · ')}
+            Suggested: {transfers.map((t) => `${t.from_name} → ${t.to_name} ${fmt(t.amount, t.currency)}`).join(' · ')}
           </p>
         )}
         <form onSubmit={submit}>
@@ -48,8 +51,11 @@ export default function SettleModal({ group, user, transfers, onClose, onSaved }
             </div>
             <div className="field">
               <label>Amount (€)</label>
+              <div className="amount-row">
               <input type="number" step="0.01" min="0.01" required value={amount}
                      onChange={(e) => setAmount(e.target.value)} />
+              <CurrencySelect value={ccy} onChange={setCcy} />
+              </div>
             </div>
           </div>
           {error && <div className="error">{error}</div>}

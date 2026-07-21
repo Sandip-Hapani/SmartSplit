@@ -5,6 +5,7 @@ from .. import models, schemas
 from ..auth import get_current_user, require_membership
 from ..database import get_db
 from ..services.history import log, snapshot_expense
+from ..services import currency as fx
 from ..services.splits import compute_splits
 
 router = APIRouter(prefix="/api/groups/{group_id}/expenses", tags=["expenses"])
@@ -14,6 +15,10 @@ def _expense_out(exp: models.Expense) -> schemas.ExpenseOut:
     return schemas.ExpenseOut(
         id=exp.id, group_id=exp.group_id, description=exp.description, amount=exp.amount,
         currency=exp.currency, date=exp.date, paid_by=exp.paid_by, payer_name=exp.payer.name,
+        payers=[
+            schemas.PayerOut(user_id=p.user_id, user_name=p.user.name, amount=p.amount)
+            for p in sorted(exp.payments, key=lambda p: -p.amount)
+        ],
         split_type=exp.split_type, notes=exp.notes or "", created_at=exp.created_at,
         splits=[
             schemas.SplitOut(user_id=s.user_id, user_name=s.user.name, amount=s.amount)
@@ -32,24 +37,55 @@ def _expense_out(exp: models.Expense) -> schemas.ExpenseOut:
     )
 
 
-def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCreate,
-                   member_ids: set[int]):
+PAYMENT_TOL = 0.011
+
+
+def _resolve_payers(payload: schemas.ExpenseCreate,
+                    member_ids: set[int]) -> list[tuple[int, float]]:
+    """Normalize `paid_by` / `payers` into [(user_id, amount)] and validate it."""
+    if payload.payers:
+        ids = [p.user_id for p in payload.payers]
+        if len(set(ids)) != len(ids):
+            raise HTTPException(400, "The same person is listed as payer twice")
+        outsiders = set(ids) - member_ids
+        if outsiders:
+            raise HTTPException(400, "Everyone who paid must be a member of this group")
+        total = sum(p.amount for p in payload.payers)
+        if abs(total - payload.amount) > PAYMENT_TOL:
+            raise HTTPException(
+                400,
+                f"Payments add up to {total:.2f} but the expense is {payload.amount:.2f}",
+            )
+        return [(p.user_id, round(p.amount, 2)) for p in payload.payers]
+
+    if payload.paid_by is None:
+        raise HTTPException(400, "Say who paid")
     if payload.paid_by not in member_ids:
         raise HTTPException(400, "Payer must be a group member")
+    return [(payload.paid_by, payload.amount)]
+
+
+def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCreate,
+                   member_ids: set[int], group_currency: str = "EUR"):
+    payers = _resolve_payers(payload, member_ids)
     per_user = compute_splits(payload, member_ids)
 
     exp.description = payload.description
     exp.amount = payload.amount
-    exp.currency = payload.currency
+    exp.currency = fx.normalize(payload.currency, group_currency)
     if payload.date:
         exp.date = payload.date
-    exp.paid_by = payload.paid_by
+    # `paid_by` mirrors the biggest contributor so single-payer reads stay simple
+    exp.paid_by = max(payers, key=lambda p: p[1])[0]
     exp.split_type = payload.split_type
     exp.notes = payload.notes
 
     exp.splits.clear()
     exp.items.clear()
+    exp.payments.clear()
     db.flush()
+    for uid, amt in payers:
+        exp.payments.append(models.ExpensePayment(user_id=uid, amount=amt))
     for uid, amt in per_user.items():
         exp.splits.append(models.ExpenseSplit(user_id=uid, amount=amt))
     if payload.split_type == "itemized":
@@ -60,6 +96,10 @@ def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCre
             for uid in item.participant_ids:
                 db_item.participants.append(models.ExpenseItemParticipant(user_id=uid))
             exp.items.append(db_item)
+
+
+def _payer_note(exp: models.Expense) -> str:
+    return f", paid by {len(exp.payments)} people" if len(exp.payments) > 1 else ""
 
 
 @router.get("", response_model=list[schemas.ExpenseOut])
@@ -74,14 +114,16 @@ def list_expenses(group_id: int, user: models.User = Depends(get_current_user),
 @router.post("", response_model=schemas.ExpenseOut)
 def create_expense(group_id: int, payload: schemas.ExpenseCreate,
                    user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_membership(db, group_id, user)
+    group = require_membership(db, group_id, user)
     member_ids = {m.user_id for m in db.query(models.GroupMember).filter_by(group_id=group_id)}
     exp = models.Expense(group_id=group_id, created_by=user.id, description="", amount=0, paid_by=user.id)
     db.add(exp)
-    _apply_payload(db, exp, payload, member_ids)
+    _apply_payload(db, exp, payload, member_ids, group.default_currency)
     db.flush()
     log(db, group_id, user.id, "expense_added",
-        f"{user.name} added \"{payload.description}\" (€{payload.amount:.2f})",
+        f"{user.name} added \"{payload.description}\" "
+        f"({fx.CURRENCIES[exp.currency][0]}{payload.amount:.2f}"
+        f"{_payer_note(exp)})",
         {"expense_id": exp.id})
     db.commit()
     db.refresh(exp)
@@ -91,16 +133,17 @@ def create_expense(group_id: int, payload: schemas.ExpenseCreate,
 @router.put("/{expense_id}", response_model=schemas.ExpenseOut)
 def update_expense(group_id: int, expense_id: int, payload: schemas.ExpenseCreate,
                    user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_membership(db, group_id, user)
+    group = require_membership(db, group_id, user)
     exp = db.get(models.Expense, expense_id)
     if not exp or exp.group_id != group_id:
         raise HTTPException(404, "Expense not found")
     member_ids = {m.user_id for m in db.query(models.GroupMember).filter_by(group_id=group_id)}
     before = snapshot_expense(exp)
-    _apply_payload(db, exp, payload, member_ids)
+    _apply_payload(db, exp, payload, member_ids, group.default_currency)
     db.flush()
     log(db, group_id, user.id, "expense_edited",
-        f"{user.name} edited \"{payload.description}\" (€{payload.amount:.2f})",
+        f"{user.name} edited \"{payload.description}\" "
+        f"({fx.CURRENCIES[exp.currency][0]}{payload.amount:.2f})",
         {"before": before, "after": snapshot_expense(exp)})
     db.commit()
     db.refresh(exp)
@@ -115,7 +158,8 @@ def delete_expense(group_id: int, expense_id: int,
     if not exp or exp.group_id != group_id:
         raise HTTPException(404, "Expense not found")
     log(db, group_id, user.id, "expense_deleted",
-        f"{user.name} deleted \"{exp.description}\" (€{exp.amount:.2f})",
+        f"{user.name} deleted \"{exp.description}\" "
+        f"({fx.CURRENCIES[fx.normalize(exp.currency)][0]}{exp.amount:.2f})",
         {"before": snapshot_expense(exp)})
     db.delete(exp)
     db.commit()

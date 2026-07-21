@@ -16,11 +16,34 @@ among the people ticked for it.
     are verified on first login; password accounts get a banner to verify on demand
 Four sections once you're signed in: **Groups**, **Friends**, **Activity**, **Account**.
 
+### Multiple currencies
+- Every expense and settlement carries its own currency; each group has a
+  default that new entries start from
+- **Balances are kept per currency and never netted together.** You can be owed
+  CHF 69 while owing €203 in the same group, and each is settled separately.
+  No exchange rate is ever baked into what someone owes, so nobody gains or
+  loses when rates move
+- Conversion exists only for *display* — the Insights totals and chart fold
+  everything into one currency you pick, clearly labelled as approximate
+- Rates come from the European Central Bank (via Frankfurter, no API key),
+  fetched at startup and cached daily in the database, with a second free
+  provider as backup. A group can **pin its own rate** in Settings, which then
+  wins over the live one until you switch back
+
 ### Groups
 - Every group you belong to, with members, balances, and settle-up
 - **Simplify debts is per-group and optional.** On, balances net down to the
   fewest payments across everyone. Off, each debt stays with the person who
   actually paid — more transfers, but every one traces to a real expense
+- **Insights**: all-time / this-month / last-month totals, your share of each,
+  and a 12-month column chart of group spending vs your share. Hover any month
+  for exact figures, or switch to the table view
+- **Export CSV** in the same ledger layout Splitwise uses: one column per
+  person, each cell being what they paid minus what they owed, so every row
+  sums to zero. Settlements appear inline as "A paid B" rows, and the closing
+  **Total balance** row is just each column's sum. The layout is independent of
+  the simplify setting — that only changes *suggested* transfers, never the
+  ledger or the net balances
 - **Whiteboard**: shared notes for the group (packing lists, house rules, the
   WiFi password). Anyone can post; only the author can edit or delete their own
 - **Activity with undo**, append-only like git. Undoing a deleted expense
@@ -28,6 +51,19 @@ Four sections once you're signed in: **Groups**, **Friends**, **Activity**, **Ac
   marked "undone", so history is never rewritten. Works for added, edited, and
   deleted expenses, settlements, and added members
 - Expenses with split types: equal, exact amounts, percentages, shares, and **itemized**
+- **Several people can pay one bill.** Switch "Paid by" to *Several people paid*
+  and enter what each covered; the amounts must add up to the expense, and
+  everyone listed must be a group member. Each payer is credited individually,
+  so with simplification off a participant repays each payer in proportion to
+  what they actually put in
+- **Everything about an entry stays editable after it's saved** — name, amount,
+  currency, date, who paid, the split method, and who's included. Switching
+  between split types is allowed too, including converting a flat expense into
+  a per-product one
+- **Bill-parsed entries are fully editable as well**: the same product grid you
+  saw on upload reopens, so you can rename or delete a product, change its
+  price, and tick or untick individual people per product. The expense total
+  recomputes from the rows
 
 ### Friends
 - Friend requests by username, email, or by scanning their QR code
@@ -38,6 +74,8 @@ Four sections once you're signed in: **Groups**, **Friends**, **Activity**, **Ac
 - One feed of everything happening across all your groups, with the same undo
 
 ### Account
+- **Spending across every group combined** — the same totals, chart, and
+  **CSV export**, but account-wide instead of per-group
 - Display name and a **unique username**, checked for availability as you type
 - **Appearance**: system, light, or dark theme, saved to your account
 - **Your friend code** as a QR image others can scan to add you
@@ -47,6 +85,8 @@ Four sections once you're signed in: **Groups**, **Friends**, **Activity**, **Ac
     German receipts (EDEKA Kassenbon: weight items, `€ x N` quantity items,
     item-level coupons merged into their item, bill-level coupons, Pfand)
   - Parsed items are validated against the receipt total (✓ shown in UI)
+  - Entries created from a bill are named `YYYY-MM-DD Store` using the
+    receipt's own date, so they're identifiable in the list and in exports
   - Optional Groq fallback (official `groq` SDK) for photos/scans or receipts
     the rules can't handle: set `GROQ_API_KEY` in the backend environment.
     Uploaded images are normalized to RGB JPEG first — vision models misread

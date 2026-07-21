@@ -1,12 +1,14 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import mailer, models, otp, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..services import reports
 
 router = APIRouter(prefix="/api/account", tags=["account"])
 
@@ -87,6 +89,28 @@ def update_profile(payload: schemas.ProfileUpdate,
     db.commit()
     db.refresh(user)
     return user
+
+
+# ---------------------------------------------------------------- reports
+
+@router.get("/stats", response_model=schemas.SpendStats,
+            summary="Spending totals and a 12-month series across every group")
+def account_stats(display: str = "EUR", user: models.User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    return reports.build_stats(db, reports.my_group_ids(db, user.id), user.id, display=display)
+
+
+@router.get("/expenses.csv", response_class=PlainTextResponse,
+            summary="Download every expense from all your groups as CSV")
+def account_expenses_csv(user: models.User = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    body = reports.expenses_csv(db, reports.my_group_ids(db, user.id), user.id,
+                                with_group_column=True)
+    return PlainTextResponse(
+        "﻿" + body,  # BOM so Excel reads UTF-8 accents correctly
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="smartsplit-all-expenses.csv"'},
+    )
 
 
 # ---------------------------------------------------------------- email change

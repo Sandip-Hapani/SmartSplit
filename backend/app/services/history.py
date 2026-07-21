@@ -43,6 +43,7 @@ def snapshot_expense(exp: models.Expense) -> dict:
         "split_type": exp.split_type,
         "notes": exp.notes or "",
         "created_by": exp.created_by,
+        "payers": [{"user_id": p.user_id, "amount": p.amount} for p in exp.payments],
         "splits": [{"user_id": s.user_id, "amount": s.amount} for s in exp.splits],
         "items": [
             {
@@ -72,6 +73,8 @@ def restore_expense(db: Session, group_id: int, snap: dict) -> models.Expense:
     db.add(exp)
     db.flush()
 
+    for p in snap.get("payers", []) or [{"user_id": snap["paid_by"], "amount": snap["amount"]}]:
+        exp.payments.append(models.ExpensePayment(user_id=p["user_id"], amount=p["amount"]))
     for s in snap.get("splits", []):
         exp.splits.append(models.ExpenseSplit(user_id=s["user_id"], amount=s["amount"]))
     for i in snap.get("items", []):
@@ -98,7 +101,10 @@ def _overwrite_expense(db: Session, exp: models.Expense, snap: dict) -> None:
 
     exp.splits.clear()
     exp.items.clear()
+    exp.payments.clear()   # otherwise the restored payers stack on the current ones
     db.flush()
+    for p in snap.get("payers", []) or [{"user_id": snap["paid_by"], "amount": snap["amount"]}]:
+        exp.payments.append(models.ExpensePayment(user_id=p["user_id"], amount=p["amount"]))
     for s in snap.get("splits", []):
         exp.splits.append(models.ExpenseSplit(user_id=s["user_id"], amount=s["amount"]))
     for i in snap.get("items", []):
@@ -175,7 +181,10 @@ def undo(db: Session, entry: models.Activity, actor: models.User) -> models.Acti
         raise HTTPException(400, "This kind of activity can't be undone.")
 
     entry.undone = True
-    reversal = log(db, gid, actor.id, "undo", description,
+    # Removing a member is its own user-facing action, not a generic reversal,
+    # so it gets its own type (and therefore its own icon) in the feed.
+    reversal_type = "member_removed" if entry.type == "member_added" else "undo"
+    reversal = log(db, gid, actor.id, reversal_type, description,
                    {"undid_activity_id": entry.id, "undid_type": entry.type})
     reversal.undo_of_id = entry.id
     db.flush()

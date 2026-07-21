@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { api } from '../api'
+import Insights from '../components/Insights'
 
 const THEMES = [
   { id: 'system', label: 'System', hint: 'Follow your device' },
@@ -81,6 +82,14 @@ export default function AccountPage({ user, onUser }) {
             {saving ? 'Saving…' : 'Save profile'}
           </button>
         </form>
+      </div>
+
+      <div className="card">
+        <h3>Spending</h3>
+        <p className="muted" style={{ marginTop: -6 }}>
+          Every group you're in, combined.
+        </p>
+        <Insights />
       </div>
 
       <EmailCard user={user} onUser={onUser} />

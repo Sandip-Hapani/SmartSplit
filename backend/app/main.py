@@ -1,3 +1,4 @@
+import logging
 import time
 
 from fastapi import FastAPI
@@ -7,8 +8,8 @@ from sqlalchemy.exc import OperationalError
 from . import migrate
 from .database import Base, engine
 from .routers import (
-    account_router, activity_router, auth_router, bills_router, expenses_router,
-    friends_router, groups_router, recurring_router,
+    account_router, activity_router, auth_router, bills_router, currency_router,
+    expenses_router, friends_router, groups_router, recurring_router,
 )
 
 # The database container may still be starting when the API boots.
@@ -22,6 +23,16 @@ for attempt in range(30):
         time.sleep(1)
 
 migrate.run(engine)
+
+# Warm the FX cache so the first request doesn't pay for the fetch. A failure
+# here is not fatal — the app falls back to whatever is already cached.
+try:
+    from .database import SessionLocal
+    from .services import currency as _fx
+    with SessionLocal() as _s:
+        _fx.refresh_rates(_s)
+except Exception as _exc:  # pragma: no cover
+    logging.getLogger("smartsplit").warning("Rate warm-up skipped: %s", _exc)
 
 tags_metadata = [
     {"name": "auth", "description": "Register, log in, and inspect the current user. "
@@ -80,6 +91,7 @@ app.include_router(bills_router.router)
 app.include_router(recurring_router.router)
 app.include_router(friends_router.router)
 app.include_router(activity_router.router)
+app.include_router(currency_router.router)
 
 
 @app.get("/api/health", tags=["health"])
