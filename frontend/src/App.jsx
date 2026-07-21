@@ -55,7 +55,7 @@ export default function App() {
   return (
     <>
       {user && (
-        <>
+        <div className="appbar">
           <div className="topbar">
             <a className="logo" href="/groups">SmartSplit</a>
             <div className="who">
@@ -75,7 +75,7 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
-        </>
+        </div>
       )}
 
       <Routes>
