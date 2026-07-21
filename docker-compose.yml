@@ -18,6 +18,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://smartsplit:${POSTGRES_PASSWORD:-smartsplit}@db:5432/smartsplit
       SMARTSPLIT_SECRET: ${SMARTSPLIT_SECRET:-change-me-to-a-long-random-string}
+      SMARTSPLIT_ENV: ${SMARTSPLIT_ENV:-development}
+      # local convenience only: returns OTP codes in the API response.
+      # Never set this on a public instance — it lets anyone sign in as anyone.
+      SMARTSPLIT_ALLOW_DEV_CODES: ${SMARTSPLIT_ALLOW_DEV_CODES:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       # "Sign in with Google"; unset = the button is hidden
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

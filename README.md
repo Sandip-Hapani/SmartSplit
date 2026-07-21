@@ -1,9 +1,57 @@
 # SmartSplit
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Issues](https://img.shields.io/github/issues/Sandip-Hapani/SmartSplit)](https://github.com/Sandip-Hapani/SmartSplit/issues)
+
 Splitwise-style expense sharing webapp with one extra trick: **upload a bill
 (PDF or photo) and it parses every line item**, then shows a matrix where you
 tick/untick which person shares which product. Each item's cost is split only
 among the people ticked for it.
+
+## Try it
+
+**Demo: _add your URL here after deploying_**
+
+It's a test instance, so please know:
+
+- The free host **sleeps when idle** — the first load after a quiet spell can
+  take up to a minute. It isn't broken, just waking up.
+- **Don't put anything real in it.** Data may be wiped without warning, and
+  anyone can sign up.
+- Found something wrong? [Open an issue](https://github.com/Sandip-Hapani/SmartSplit/issues/new/choose)
+  — bug reports are exactly what this instance is for.
+
+## Deploy your own (free)
+
+The root `Dockerfile` builds **one image that serves both the API and the UI**,
+so a free tier only needs a single service — no CORS or proxy to configure.
+
+**Render** — push to GitHub, then New → Blueprint and pick the repo;
+[`render.yaml`](render.yaml) sets up the web service and database, and generates
+`SMARTSPLIT_SECRET` for you. Render's free Postgres expires after 30 days; for
+something longer-lived, drop the `databases:` block and point `DATABASE_URL` at
+a free [Neon](https://neon.tech) project.
+
+Anywhere else that runs a container works the same way:
+
+```bash
+docker build -t smartsplit .
+docker run -p 8000:8000   -e DATABASE_URL="postgresql+psycopg://user:pass@host/db"   -e SMARTSPLIT_SECRET="$(openssl rand -base64 48)"   -e SMARTSPLIT_ENV=production   smartsplit
+```
+
+### Before you make it public
+
+- **Set `SMARTSPLIT_SECRET`.** With `SMARTSPLIT_ENV=production` the app refuses
+  to start on the built-in default, because a known signing key would let
+  anyone mint a token for any account.
+- **Never set `SMARTSPLIT_ALLOW_DEV_CODES` in production.** It returns login
+  codes in the API response, which means anyone could request a code for any
+  address and sign in as them. Without it, and without SMTP, email sign-in is
+  simply switched off and the app falls back to Google / password.
+- **`GROQ_API_KEY` is optional.** Text PDFs parse locally without it; setting it
+  means strangers' photo uploads spend your Groq quota.
+- **Google sign-in** needs your deployed URL added to the Authorised JavaScript
+  origins in Google Cloud Console.
 
 ## Features
 

@@ -1,0 +1,58 @@
+# One-click deploy on Render's free tier.
+#
+#   1. Push this repo to GitHub
+#   2. render.com → New → Blueprint → pick the repo
+#   3. Fill in the values Render marks as required (see below)
+#
+# The free web service sleeps after ~15 minutes idle and takes roughly a minute
+# to wake, which is fine for a test instance — say so in your README so testers
+# don't file "the site is slow" issues.
+#
+# Render's free Postgres expires after 30 days. For something longer-lived,
+# delete the `databases:` block and point DATABASE_URL at a free Neon project
+# (neon.tech) instead — that one doesn't expire.
+
+services:
+  - type: web
+    name: smartsplit
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smartsplit-db
+          property: connectionString
+      - key: SMARTSPLIT_ENV
+        value: production
+      # generated once by Render and kept secret; never commit a real one
+      - key: SMARTSPLIT_SECRET
+        generateValue: true
+
+      # --- optional, set in the Render dashboard if you want them ---
+      # Google sign-in: add your deployed URL to the Authorised JavaScript
+      # origins in Google Cloud Console first, or the button will not work.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      # Email codes. Without SMTP the app hides email sign-in entirely and
+      # falls back to Google / password — which is safe, just less convenient.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      # Receipt parsing falls back to this for photos and scans. Leaving it
+      # unset still parses text PDFs locally; setting it means strangers'
+      # uploads spend your Groq quota.
+      - key: GROQ_API_KEY
+        sync: false
+
+databases:
+  - name: smartsplit-db
+    plan: free
+    databaseName: smartsplit
+    user: smartsplit
