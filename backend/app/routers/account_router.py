@@ -120,6 +120,9 @@ def account_expenses_csv(user: models.User = Depends(get_current_user),
 def request_email_change(payload: schemas.EmailChangeRequest,
                          user: models.User = Depends(get_current_user),
                          db: Session = Depends(get_db)):
+    if not mailer.email_login_available():
+        raise HTTPException(503, "Changing your email needs a mail service configured "
+                                 "on this server.")
     new_email = payload.new_email.lower()
     if new_email == user.email:
         raise HTTPException(400, "That's already your email address.")
@@ -136,7 +139,7 @@ def request_email_change(payload: schemas.EmailChangeRequest,
     return schemas.OTPRequestOut(
         sent=sent, is_new_user=False,
         expires_in_minutes=mailer.OTP_TTL_MINUTES,
-        dev_code=None if sent else code,
+        dev_code=None if sent or not mailer.ALLOW_DEV_CODES else code,
         message=f"Code sent to {new_email}." if sent
                 else "SMTP is not configured — the code is returned here for local development.",
     )

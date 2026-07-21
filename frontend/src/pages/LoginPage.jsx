@@ -18,6 +18,7 @@ export default function LoginPage({ onAuth }) {
   const [busy, setBusy] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const [googleClientId, setGoogleClientId] = useState(null)
+  const [otpEnabled, setOtpEnabled] = useState(true)
   const codeRef = useRef(null)
   const navigate = useNavigate()
 
@@ -25,7 +26,12 @@ export default function LoginPage({ onAuth }) {
 
   useEffect(() => {
     api.authConfig()
-      .then((cfg) => setGoogleClientId(cfg.google_enabled ? cfg.google_client_id : null))
+      .then((cfg) => {
+        setGoogleClientId(cfg.google_enabled ? cfg.google_client_id : null)
+        setOtpEnabled(cfg.email_otp_enabled)
+        // this server can't send mail, so start on the password form
+        if (!cfg.email_otp_enabled) setMethod('password')
+      })
       .catch(() => setGoogleClientId(null))
   }, [])
 
@@ -208,9 +214,11 @@ export default function LoginPage({ onAuth }) {
               </button>
             </form>
             <p className="muted">
-              <a href="#" onClick={(e) => { e.preventDefault(); setMethod('otp'); setError('') }}>
-                Email me a code instead
-              </a>
+              {otpEnabled && (
+                <a href="#" onClick={(e) => { e.preventDefault(); setMethod('otp'); setError('') }}>
+                  Email me a code instead
+                </a>
+              )}
             </p>
           </>
         )}

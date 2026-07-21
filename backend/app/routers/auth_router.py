@@ -9,6 +9,14 @@ from .account_router import generate_username
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+EMAIL_OFF = ("Email sign-in isn't available on this server because no mail service "
+             "is configured. Use Google, or an email and password.")
+
+
+def _dev_code(sent: bool, code: str) -> str | None:
+    """Only ever expose a code when dev codes are explicitly switched on."""
+    return None if sent or not mailer.ALLOW_DEV_CODES else code
+
 
 @router.get("/config", response_model=schemas.AuthConfig,
             summary="Which sign-in methods this server offers")
@@ -18,6 +26,7 @@ def auth_config():
     return schemas.AuthConfig(
         google_client_id=google_auth.GOOGLE_CLIENT_ID or None,
         google_enabled=google_auth.is_configured(),
+        email_otp_enabled=mailer.email_login_available(),
         email_delivery="smtp" if mailer.is_configured() else "dev",
     )
 
@@ -109,6 +118,9 @@ def request_otp(payload: schemas.OTPRequest, db: Session = Depends(get_db)):
     Sends a 6-digit code to the address. `is_new_user` tells the client whether
     to collect a display name before verifying.
     """
+    if not mailer.email_login_available():
+        raise HTTPException(503, EMAIL_OFF)
+
     email = payload.email.lower()
     existing = db.query(models.User).filter_by(email=email).first()
 
@@ -122,7 +134,7 @@ def request_otp(payload: schemas.OTPRequest, db: Session = Depends(get_db)):
         sent=sent,
         is_new_user=existing is None,
         expires_in_minutes=mailer.OTP_TTL_MINUTES,
-        dev_code=None if sent else code,
+        dev_code=_dev_code(sent, code),
         message=(
             f"Code sent to {email}."
             if sent
@@ -166,6 +178,8 @@ def verify_otp(payload: schemas.OTPVerify, db: Session = Depends(get_db)):
 def request_email_verification(
     user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
+    if not mailer.email_login_available():
+        raise HTTPException(503, EMAIL_OFF)
     if user.email_verified:
         return schemas.OTPRequestOut(
             sent=False, is_new_user=False,
@@ -183,7 +197,7 @@ def request_email_verification(
         sent=sent,
         is_new_user=False,
         expires_in_minutes=mailer.OTP_TTL_MINUTES,
-        dev_code=None if sent else code,
+        dev_code=_dev_code(sent, code),
         message=f"Verification code sent to {user.email}." if sent
                 else "SMTP is not configured — the code is returned here for local development.",
     )

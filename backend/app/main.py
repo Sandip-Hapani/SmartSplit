@@ -1,8 +1,13 @@
 import logging
+import os
 import time
+
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError
 
 from . import migrate
@@ -23,6 +28,19 @@ for attempt in range(30):
         time.sleep(1)
 
 migrate.run(engine)
+
+# A predictable signing key lets anyone mint a token for any account, so a real
+# deployment must supply its own. Local development may skip it with a warning.
+_DEV_SECRET = "dev-secret-change-me-0123456789abcdef"
+if os.environ.get("SMARTSPLIT_SECRET", _DEV_SECRET) == _DEV_SECRET:
+    if os.environ.get("SMARTSPLIT_ENV", "development").lower() in ("production", "prod"):
+        raise RuntimeError(
+            "SMARTSPLIT_SECRET is still the built-in development value. "
+            "Set a long random one before running in production."
+        )
+    logging.getLogger("smartsplit").warning(
+        "Using the built-in development JWT secret — never do this on a public instance."
+    )
 
 # Warm the FX cache so the first request doesn't pay for the fetch. A failure
 # here is not fatal — the app falls back to whatever is already cached.
@@ -97,3 +115,23 @@ app.include_router(currency_router.router)
 @app.get("/api/health", tags=["health"])
 def health():
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- static UI
+# When the built frontend is baked into the image (see the root Dockerfile) the
+# API serves it too, so a deployment is a single service on a single origin —
+# no CORS, no reverse proxy. Without that directory this does nothing, so
+# running the API alone in development is unaffected.
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+
+if _STATIC.is_dir():
+    app.mount("/assets", StaticFiles(directory=_STATIC / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        """Serve a real file when one matches, otherwise hand back index.html so
+        client-side routes survive a refresh or a shared link."""
+        candidate = (_STATIC / full_path).resolve()
+        if full_path and candidate.is_file() and _STATIC in candidate.parents:
+            return FileResponse(candidate)
+        return FileResponse(_STATIC / "index.html")

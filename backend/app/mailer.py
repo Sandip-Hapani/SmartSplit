@@ -27,6 +27,18 @@ SMTP_SSL = os.environ.get("SMTP_SSL", "").lower() in ("1", "true", "yes")
 
 OTP_TTL_MINUTES = int(os.environ.get("OTP_TTL_MINUTES", "10"))
 
+# Returning the code in the API response is a local-development convenience and
+# a complete authentication bypass on a public instance — anyone could request a
+# code for any address and read it straight back. So it is opt-in, never a
+# silent fallback when SMTP happens to be unset.
+ALLOW_DEV_CODES = os.environ.get("SMARTSPLIT_ALLOW_DEV_CODES", "").lower() in ("1", "true", "yes")
+
+
+def email_login_available() -> bool:
+    """True when a code can actually reach the user — real mail, or dev codes
+    deliberately switched on for local work."""
+    return is_configured() or ALLOW_DEV_CODES
+
 
 def is_configured() -> bool:
     return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
