@@ -15,6 +15,10 @@ def _expense_out(exp: models.Expense) -> schemas.ExpenseOut:
     return schemas.ExpenseOut(
         id=exp.id, group_id=exp.group_id, description=exp.description, amount=exp.amount,
         currency=exp.currency, date=exp.date, paid_by=exp.paid_by, payer_name=exp.payer.name,
+        payers=[
+            schemas.PayerOut(user_id=p.user_id, user_name=p.user.name, amount=p.amount)
+            for p in sorted(exp.payments, key=lambda p: -p.amount)
+        ],
         split_type=exp.split_type, notes=exp.notes or "", created_at=exp.created_at,
         splits=[
             schemas.SplitOut(user_id=s.user_id, user_name=s.user.name, amount=s.amount)
@@ -33,10 +37,37 @@ def _expense_out(exp: models.Expense) -> schemas.ExpenseOut:
     )
 
 
-def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCreate,
-                   member_ids: set[int], group_currency: str = "EUR"):
+PAYMENT_TOL = 0.011
+
+
+def _resolve_payers(payload: schemas.ExpenseCreate,
+                    member_ids: set[int]) -> list[tuple[int, float]]:
+    """Normalize `paid_by` / `payers` into [(user_id, amount)] and validate it."""
+    if payload.payers:
+        ids = [p.user_id for p in payload.payers]
+        if len(set(ids)) != len(ids):
+            raise HTTPException(400, "The same person is listed as payer twice")
+        outsiders = set(ids) - member_ids
+        if outsiders:
+            raise HTTPException(400, "Everyone who paid must be a member of this group")
+        total = sum(p.amount for p in payload.payers)
+        if abs(total - payload.amount) > PAYMENT_TOL:
+            raise HTTPException(
+                400,
+                f"Payments add up to {total:.2f} but the expense is {payload.amount:.2f}",
+            )
+        return [(p.user_id, round(p.amount, 2)) for p in payload.payers]
+
+    if payload.paid_by is None:
+        raise HTTPException(400, "Say who paid")
     if payload.paid_by not in member_ids:
         raise HTTPException(400, "Payer must be a group member")
+    return [(payload.paid_by, payload.amount)]
+
+
+def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCreate,
+                   member_ids: set[int], group_currency: str = "EUR"):
+    payers = _resolve_payers(payload, member_ids)
     per_user = compute_splits(payload, member_ids)
 
     exp.description = payload.description
@@ -44,13 +75,17 @@ def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCre
     exp.currency = fx.normalize(payload.currency, group_currency)
     if payload.date:
         exp.date = payload.date
-    exp.paid_by = payload.paid_by
+    # `paid_by` mirrors the biggest contributor so single-payer reads stay simple
+    exp.paid_by = max(payers, key=lambda p: p[1])[0]
     exp.split_type = payload.split_type
     exp.notes = payload.notes
 
     exp.splits.clear()
     exp.items.clear()
+    exp.payments.clear()
     db.flush()
+    for uid, amt in payers:
+        exp.payments.append(models.ExpensePayment(user_id=uid, amount=amt))
     for uid, amt in per_user.items():
         exp.splits.append(models.ExpenseSplit(user_id=uid, amount=amt))
     if payload.split_type == "itemized":
@@ -61,6 +96,10 @@ def _apply_payload(db: Session, exp: models.Expense, payload: schemas.ExpenseCre
             for uid in item.participant_ids:
                 db_item.participants.append(models.ExpenseItemParticipant(user_id=uid))
             exp.items.append(db_item)
+
+
+def _payer_note(exp: models.Expense) -> str:
+    return f", paid by {len(exp.payments)} people" if len(exp.payments) > 1 else ""
 
 
 @router.get("", response_model=list[schemas.ExpenseOut])
@@ -83,7 +122,8 @@ def create_expense(group_id: int, payload: schemas.ExpenseCreate,
     db.flush()
     log(db, group_id, user.id, "expense_added",
         f"{user.name} added \"{payload.description}\" "
-        f"({fx.CURRENCIES[exp.currency][0]}{payload.amount:.2f})",
+        f"({fx.CURRENCIES[exp.currency][0]}{payload.amount:.2f}"
+        f"{_payer_note(exp)})",
         {"expense_id": exp.id})
     db.commit()
     db.refresh(exp)

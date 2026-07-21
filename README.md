@@ -51,6 +51,19 @@ Four sections once you're signed in: **Groups**, **Friends**, **Activity**, **Ac
   marked "undone", so history is never rewritten. Works for added, edited, and
   deleted expenses, settlements, and added members
 - Expenses with split types: equal, exact amounts, percentages, shares, and **itemized**
+- **Several people can pay one bill.** Switch "Paid by" to *Several people paid*
+  and enter what each covered; the amounts must add up to the expense, and
+  everyone listed must be a group member. Each payer is credited individually,
+  so with simplification off a participant repays each payer in proportion to
+  what they actually put in
+- **Everything about an entry stays editable after it's saved** — name, amount,
+  currency, date, who paid, the split method, and who's included. Switching
+  between split types is allowed too, including converting a flat expense into
+  a per-product one
+- **Bill-parsed entries are fully editable as well**: the same product grid you
+  saw on upload reopens, so you can rename or delete a product, change its
+  price, and tick or untick individual people per product. The expense total
+  recomputes from the rows
 
 ### Friends
 - Friend requests by username, email, or by scanning their QR code

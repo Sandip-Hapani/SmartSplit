@@ -12,6 +12,15 @@ import Insights from '../components/Insights'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { UI } from '../icons'
 
+/** "paid by you", "paid by Maya", or "paid by you and 2 others". */
+const paidByLabel = (row, meId) => {
+  const payers = row.payers?.length ? row.payers : [{ user_id: row.paid_by, user_name: row.payer_name }]
+  const name = (p) => (p.user_id === meId ? 'you' : p.user_name)
+  if (payers.length === 1) return `paid by ${name(payers[0])}`
+  if (payers.length === 2) return `paid by ${name(payers[0])} and ${name(payers[1])}`
+  return `paid by ${name(payers[0])} and ${payers.length - 1} others`
+}
+
 const monthLabel = (iso) =>
   iso ? new Date(`${iso}T00:00:00`).toLocaleDateString([], { month: 'long', year: 'numeric' }) : ''
 
@@ -196,14 +205,20 @@ export default function GroupPage({ user }) {
                   <div className="ex-main">
                     <strong>{row.description}</strong>
                     {row.split_type === 'itemized' && <span className="muted"> · {row.items.length} items</span>}
-                    <div className="muted">
-                      paid by {row.paid_by === user.id ? 'you' : row.payer_name}
-                    </div>
+                    <div className="muted">{paidByLabel(row, user.id)}</div>
                   </div>
                   <div className="row">
                     <strong>{fmt(row.amount, row.currency)}</strong>
-                    <button className="secondary" onClick={(e) => { e.stopPropagation(); setEditExpense(row); setShowExpense(true) }}>Edit</button>
-                    <button className="danger" onClick={(e) => { e.stopPropagation(); removeExpense(row) }}>✕</button>
+                    <button className="icon-btn edit" title="Edit this entry"
+                            aria-label={`Edit ${row.description}`}
+                            onClick={(e) => { e.stopPropagation(); setEditExpense(row); setShowExpense(true) }}>
+                      <FontAwesomeIcon icon={UI.editEntry} />
+                    </button>
+                    <button className="icon-btn delete" title="Delete this entry"
+                            aria-label={`Delete ${row.description}`}
+                            onClick={(e) => { e.stopPropagation(); removeExpense(row) }}>
+                      <FontAwesomeIcon icon={UI.deleteEntry} />
+                    </button>
                   </div>
                 </div>
                 {expanded === row.id && (
@@ -222,6 +237,16 @@ export default function GroupPage({ user }) {
                           ))}
                         </tbody>
                       </table>
+                    )}
+                    {row.payers.length > 1 && (
+                      <div className="paid-lines">
+                        {row.payers.map((p) => (
+                          <div key={p.user_id}>
+                            {p.user_id === user.id ? 'You' : p.user_name} paid{' '}
+                            <strong>{fmt(p.amount, row.currency)}</strong>
+                          </div>
+                        ))}
+                      </div>
                     )}
                     <div style={{ marginTop: 6 }}>
                       {row.splits.map((s) => (

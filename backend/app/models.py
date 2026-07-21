@@ -127,6 +127,8 @@ class Expense(Base):
     amount = Column(Float, nullable=False)
     currency = Column(String, default="EUR")
     date = Column(Date, default=date.today)
+    # The single/primary payer. Kept alongside `payments` so one-payer expenses
+    # stay simple to read; with several payers this holds the largest one.
     paid_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     split_type = Column(String, default="equal")  # equal|exact|percent|shares|itemized
     notes = Column(Text, default="")
@@ -137,6 +139,28 @@ class Expense(Base):
     payer = relationship("User", foreign_keys=[paid_by])
     splits = relationship("ExpenseSplit", back_populates="expense", cascade="all, delete-orphan")
     items = relationship("ExpenseItem", back_populates="expense", cascade="all, delete-orphan")
+    payments = relationship(
+        "ExpensePayment", back_populates="expense", cascade="all, delete-orphan"
+    )
+
+
+class ExpensePayment(Base):
+    """Who actually put money down for this expense, and how much.
+
+    One row for a normal expense; several when people split the bill at the
+    till. The rows always add up to the expense amount.
+    """
+
+    __tablename__ = "expense_payments"
+    __table_args__ = (UniqueConstraint("expense_id", "user_id"),)
+
+    id = Column(Integer, primary_key=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+
+    expense = relationship("Expense", back_populates="payments")
+    user = relationship("User")
 
 
 class ExpenseSplit(Base):

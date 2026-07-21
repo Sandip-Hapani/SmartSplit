@@ -7,10 +7,11 @@
  * palette drifting as screens get added.
  */
 import {
-  faArrowLeft, faChartLine, faCircleUser, faDownload, faGear, faMagnifyingGlass,
+  faArrowLeft, faChartLine, faCircleUser, faDownload, faFilePen, faGear,
+  faMagnifyingGlass,
   faMoneyBillTransfer, faNoteSticky, faPaperPlane, faPenToSquare,
   faPersonCirclePlus, faQrcode, faReceipt, faRepeat, faRotateLeft, faTag,
-  faTrash, faUserMinus, faUserPlus, faUsers, faUsersRays,
+  faTrash, faTrashCan, faUserMinus, faUserPlus, faUsers, faUsersRays,
 } from '@fortawesome/free-solid-svg-icons'
 
 export const TAB_ICONS = {
@@ -48,6 +49,8 @@ export function activityIcon(row) {
 
 export const UI = {
   back: faArrowLeft,
+  editEntry: faFilePen,
+  deleteEntry: faTrashCan,
   bill: faReceipt,
   download: faDownload,
   send: faPaperPlane,

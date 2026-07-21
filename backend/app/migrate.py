@@ -58,6 +58,9 @@ def run(engine: Engine) -> None:
         if "users" in existing_tables and engine.dialect.name == "postgresql":
             conn.execute(text("ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL"))
 
+        if "expense_payments" in inspector.get_table_names():
+            _backfill_payments(conn)
+
         # ALTER TABLE ADD COLUMN doesn't carry the model's index along.
         if "users" in existing_tables:
             conn.execute(
@@ -96,3 +99,20 @@ def _backfill_usernames(conn) -> None:
             text("UPDATE users SET username = :u WHERE id = :i"), {"u": candidate, "i": uid}
         )
         log.info("Backfilled username %s for user %s", candidate, uid)
+
+
+def _backfill_payments(conn) -> None:
+    """Give every pre-existing expense a single payment row for its payer."""
+    missing = conn.execute(text(
+        "SELECT e.id, e.paid_by, e.amount FROM expenses e "
+        "LEFT JOIN expense_payments p ON p.expense_id = e.id "
+        "WHERE p.id IS NULL"
+    )).fetchall()
+    for eid, paid_by, amount in missing:
+        conn.execute(
+            text("INSERT INTO expense_payments (expense_id, user_id, amount) "
+                 "VALUES (:e, :u, :a)"),
+            {"e": eid, "u": paid_by, "a": amount},
+        )
+    if missing:
+        log.info("Backfilled %s expense payment rows", len(missing))

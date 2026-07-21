@@ -12,6 +12,13 @@ from .. import models
 from .currency import normalize
 
 
+def payers_of(exp) -> list[tuple[int, float]]:
+    """[(user_id, amount)] — falls back to the single payer for older rows."""
+    if exp.payments:
+        return [(p.user_id, p.amount) for p in exp.payments]
+    return [(exp.paid_by, exp.amount)]
+
+
 def compute_balances(db: Session, group_id: int) -> dict[str, dict[int, float]]:
     """currency -> {user_id: net balance}. Positive = is owed money."""
     members = [m.user_id for m in db.query(models.GroupMember).filter_by(group_id=group_id)]
@@ -24,7 +31,8 @@ def compute_balances(db: Session, group_id: int) -> dict[str, dict[int, float]]:
 
     for exp in db.query(models.Expense).filter_by(group_id=group_id).all():
         b = bucket(normalize(exp.currency))
-        b[exp.paid_by] = b.get(exp.paid_by, 0.0) + exp.amount
+        for uid, paid in payers_of(exp):        # every payer is credited
+            b[uid] = b.get(uid, 0.0) + paid
         for split in exp.splits:
             b[split.user_id] = b.get(split.user_id, 0.0) - split.amount
 
@@ -49,9 +57,14 @@ def direct_debts(db: Session, group_id: int) -> dict[str, list[tuple[int, int, f
 
     for exp in db.query(models.Expense).filter_by(group_id=group_id).all():
         code = normalize(exp.currency)
+        payers = payers_of(exp)
+        total_paid = sum(a for _, a in payers) or exp.amount or 1.0
+        # each participant owes every payer in proportion to what that payer put in
         for split in exp.splits:
-            if split.user_id != exp.paid_by:
-                pairs[code][(split.user_id, exp.paid_by)] += split.amount
+            for payer_id, paid in payers:
+                if split.user_id == payer_id:
+                    continue
+                pairs[code][(split.user_id, payer_id)] += split.amount * (paid / total_paid)
 
     for s in db.query(models.Settlement).filter_by(group_id=group_id).all():
         pairs[normalize(s.currency)][(s.from_user, s.to_user)] -= s.amount

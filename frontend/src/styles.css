@@ -445,3 +445,34 @@ button.ghost.danger { color: var(--red); }
 .rate-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; font-size: 14px; }
 .rate-row input { width: 110px; }
 .pill.pinned { background: var(--tone-edit-bg); color: var(--tone-edit); }
+
+/* Row actions: icon-only. The tone is visible at rest so the colour actually
+   carries meaning — amber for edit, red for delete, matching the activity feed —
+   and hover adds the tinted chip behind it. */
+.icon-btn {
+  background: transparent; padding: 7px 9px; border-radius: 8px;
+  font-size: 15px; line-height: 1;
+  transition: background .12s;
+}
+.icon-btn.edit { color: var(--tone-edit); }
+.icon-btn.delete { color: var(--tone-danger); }
+.icon-btn.edit:hover, .icon-btn.edit:focus-visible { background: var(--tone-edit-bg); }
+.icon-btn.delete:hover, .icon-btn.delete:focus-visible { background: var(--tone-danger-bg); }
+
+/* --------------------------------------------------------- multiple payers */
+.payers-link { margin-left: 8px; font-size: 12px; text-decoration: underline; }
+.payers-field { flex: 1 1 260px; }
+.payers-field > label { display: flex; align-items: baseline; }
+.payers-grid {
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px;
+}
+.payer-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 2px 0; color: var(--muted);
+}
+.payer-row.on { color: var(--ink); }
+.paid-lines {
+  margin: 2px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px dashed var(--line); font-size: 14px;
+}

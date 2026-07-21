@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from . import currency as fx
+from .simplify import payers_of
 
 MONTHS_BACK = 12
 
@@ -208,10 +209,8 @@ def expenses_csv(db: Session, group_ids: list[int], user_id: int,
     rows: list[tuple] = []
     for exp in expenses:
         owed = {s.user_id: s.amount for s in exp.splits}
-        effect = {
-            uid: (exp.amount if uid == exp.paid_by else 0.0) - owed.get(uid, 0.0)
-            for uid in people
-        }
+        paid = dict(payers_of(exp))          # several people may have chipped in
+        effect = {uid: paid.get(uid, 0.0) - owed.get(uid, 0.0) for uid in people}
         rows.append((
             exp.date, exp.id, exp.group_id, exp.description, "General",
             exp.amount, fx.normalize(exp.currency), effect,

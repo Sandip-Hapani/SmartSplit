@@ -185,17 +185,31 @@ class ItemIn(BaseModel):
     participant_ids: list[int]
 
 
+class PayerIn(BaseModel):
+    user_id: int
+    amount: float = Field(gt=0)
+
+
 class ExpenseCreate(BaseModel):
     description: str
     amount: float = Field(gt=0)
     currency: str = "EUR"
     date: Optional[Date] = None
-    paid_by: int
+    # Either a single `paid_by`, or `payers` when several people put money down.
+    # When both are given, `payers` wins.
+    paid_by: Optional[int] = None
+    payers: list[PayerIn] = []
     split_type: str = "equal"  # equal|exact|percent|shares|itemized
     notes: str = ""
     participant_ids: list[int] = []  # for equal
     splits: list[SplitIn] = []       # for exact/percent/shares
     items: list[ItemIn] = []         # for itemized
+
+
+class PayerOut(BaseModel):
+    user_id: int
+    user_name: str
+    amount: float
 
 
 class SplitOut(BaseModel):
@@ -227,6 +241,7 @@ class ExpenseOut(BaseModel):
     date: Date
     paid_by: int
     payer_name: str
+    payers: list[PayerOut] = []
     split_type: str
     notes: str
     splits: list[SplitOut]
