@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { fmt } from '../api'
+import { fmt, symbolOf } from '../api'
 
 /**
  * Monthly spending as grouped columns: what the group spent, and your share of it.
- * Both series are euros, so they share one axis.
+ * Both series are the same currency, so they share one axis.
  *
  * Palette is categorical slots 1 (blue) and 2 (green), validated for colour-vision
  * deficiency against this app's own card surfaces in light and dark.
@@ -13,6 +13,13 @@ const H = 260
 const PAD = { top: 14, right: 10, bottom: 30, left: 52 }
 const BAR_GAP = 2        // surface gap between the two bars in a month
 const RADIUS = 4         // rounded data-ends
+
+/** Axis ticks stay terse: "€750", "CHF 750", "€1.2k". */
+const axisTick = (t, code) => {
+  const sym = symbolOf(code)
+  const n = t >= 1000 ? `${Math.round(t / 100) / 10}k` : t
+  return sym.length > 1 && /\w/.test(sym[0]) ? `${sym} ${n}` : `${sym}${n}`
+}
 
 const niceMax = (v) => {
   if (v <= 0) return 10
@@ -28,7 +35,7 @@ function barPath(x, y, w, h) {
          `L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`
 }
 
-export default function SpendChart({ monthly, title = 'Monthly spending' }) {
+export default function SpendChart({ monthly, currency = 'EUR', title = 'Monthly spending' }) {
   const [hover, setHover] = useState(null)
   const [showTable, setShowTable] = useState(false)
 
@@ -73,8 +80,8 @@ export default function SpendChart({ monthly, title = 'Monthly spending' }) {
                 <tr key={m.month}>
                   <td>{m.label} {m.year}</td>
                   <td className="num">{m.count}</td>
-                  <td className="num">{fmt(m.total)}</td>
-                  <td className="num">{fmt(m.mine)}</td>
+                  <td className="num">{fmt(m.total, currency)}</td>
+                  <td className="num">{fmt(m.mine, currency)}</td>
                 </tr>
               ))}
             </tbody>
@@ -88,7 +95,7 @@ export default function SpendChart({ monthly, title = 'Monthly spending' }) {
               <g key={t}>
                 <line className="grid" x1={PAD.left} x2={W - PAD.right} y1={yOf(t)} y2={yOf(t)} />
                 <text className="axis" x={PAD.left - 8} y={yOf(t) + 4} textAnchor="end">
-                  €{t >= 1000 ? `${Math.round(t / 100) / 10}k` : t}
+                  {axisTick(t, currency)}
                 </text>
               </g>
             ))}
@@ -112,7 +119,7 @@ export default function SpendChart({ monthly, title = 'Monthly spending' }) {
                   {/* one selective direct label: the most recent month */}
                   {i === newest && m.total > 0 && !active && (
                     <text className="bar-label" x={cx} y={yOf(m.total) - 7} textAnchor="middle">
-                      {fmt(m.total)}
+                      {fmt(m.total, currency)}
                     </text>
                   )}
                 </g>
@@ -125,8 +132,8 @@ export default function SpendChart({ monthly, title = 'Monthly spending' }) {
               left: `${((PAD.left + band * hover + band / 2) / W) * 100}%`,
             }}>
               <strong>{monthly[hover].label} {monthly[hover].year}</strong>
-              <div><i className="key s1" /> Group total <b>{fmt(monthly[hover].total)}</b></div>
-              <div><i className="key s2" /> Your share <b>{fmt(monthly[hover].mine)}</b></div>
+              <div><i className="key s1" /> Group total <b>{fmt(monthly[hover].total, currency)}</b></div>
+              <div><i className="key s2" /> Your share <b>{fmt(monthly[hover].mine, currency)}</b></div>
               <div className="muted">
                 {monthly[hover].count} expense{monthly[hover].count === 1 ? '' : 's'}
               </div>

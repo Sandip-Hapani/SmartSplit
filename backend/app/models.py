@@ -47,6 +47,7 @@ class Group(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     simplify_debts = Column(Boolean, default=True, nullable=False)
+    default_currency = Column(String(3), default="EUR", nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -187,6 +188,7 @@ class Settlement(Base):
     from_user = Column(Integer, ForeignKey("users.id"), nullable=False)
     to_user = Column(Integer, ForeignKey("users.id"), nullable=False)
     amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="EUR", nullable=False)
     date = Column(Date, default=date.today)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -220,6 +222,7 @@ class RecurringExpense(Base):
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
     description = Column(String, nullable=False)
     amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="EUR", nullable=False)
     paid_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     frequency = Column(String, default="monthly")  # weekly|monthly
     next_date = Column(Date, nullable=False)
@@ -228,3 +231,23 @@ class RecurringExpense(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     payer = relationship("User", foreign_keys=[paid_by])
+
+
+class ExchangeRate(Base):
+    """Cached FX rates.
+
+    `group_id` is null for rates fetched from the reference feed, and set when a
+    group pins its own rate — the pinned one always wins for that group.
+    """
+
+    __tablename__ = "exchange_rates"
+    __table_args__ = (UniqueConstraint("group_id", "base", "quote"),)
+
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey("groups.id"))
+    base = Column(String(3), nullable=False, index=True)
+    quote = Column(String(3), nullable=False, index=True)
+    rate = Column(Float, nullable=False)          # 1 base = <rate> quote
+    as_of = Column(Date, default=date.today)
+    source = Column(String, default="live")       # live | manual
+    updated_at = Column(DateTime, default=datetime.utcnow)

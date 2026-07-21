@@ -16,6 +16,20 @@ among the people ticked for it.
     are verified on first login; password accounts get a banner to verify on demand
 Four sections once you're signed in: **Groups**, **Friends**, **Activity**, **Account**.
 
+### Multiple currencies
+- Every expense and settlement carries its own currency; each group has a
+  default that new entries start from
+- **Balances are kept per currency and never netted together.** You can be owed
+  CHF 69 while owing €203 in the same group, and each is settled separately.
+  No exchange rate is ever baked into what someone owes, so nobody gains or
+  loses when rates move
+- Conversion exists only for *display* — the Insights totals and chart fold
+  everything into one currency you pick, clearly labelled as approximate
+- Rates come from the European Central Bank (via Frankfurter, no API key),
+  fetched at startup and cached daily in the database, with a second free
+  provider as backup. A group can **pin its own rate** in Settings, which then
+  wins over the live one until you switch back
+
 ### Groups
 - Every group you belong to, with members, balances, and settle-up
 - **Simplify debts is per-group and optional.** On, balances net down to the

@@ -85,6 +85,21 @@ export default function GroupPage({ user }) {
     return out
   }, [expenses, settlements])
 
+  // balances + suggested payments, bucketed by currency
+  const byCurrency = useMemo(() => {
+    const order = []
+    const map = new Map()
+    for (const b of balances) {
+      if (!map.has(b.currency)) { map.set(b.currency, { currency: b.currency, rows: [], transfers: [] }); order.push(b.currency) }
+      map.get(b.currency).rows.push(b)
+    }
+    for (const t of transfers) {
+      if (!map.has(t.currency)) { map.set(t.currency, { currency: t.currency, rows: [], transfers: [] }); order.push(t.currency) }
+      map.get(t.currency).transfers.push(t)
+    }
+    return order.map((c) => map.get(c))
+  }, [balances, transfers])
+
   const undoActivity = async (row) => {
     setError('')
     try {
@@ -103,7 +118,9 @@ export default function GroupPage({ user }) {
 
   if (!group) return <div className="page"><div className="card">Loading…</div></div>
 
-  const myBalance = balances.find((b) => b.user_id === user.id)
+  // one line per currency the user actually has a balance in
+  const myBalances = balances.filter(
+    (b) => b.user_id === user.id && Math.abs(b.balance) > 0.005)
 
   return (
     <div className="page">
@@ -116,12 +133,14 @@ export default function GroupPage({ user }) {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            {myBalance && (
-              <div className={myBalance.balance >= 0 ? 'pos' : 'neg'} style={{ fontSize: 20 }}>
-                {myBalance.balance >= 0 ? 'you are owed ' : 'you owe '}
-                {fmt(Math.abs(myBalance.balance))}
+            {myBalances.length === 0 && <div className="muted">all settled up</div>}
+            {myBalances.map((b) => (
+              <div key={b.currency} className={b.balance >= 0 ? 'pos' : 'neg'}
+                   style={{ fontSize: 20 }}>
+                {b.balance >= 0 ? 'you are owed ' : 'you owe '}
+                {fmt(Math.abs(b.balance), b.currency)}
               </div>
-            )}
+            ))}
             <div className="row" style={{ marginTop: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => { setEditExpense(null); setShowExpense(true) }}>Add expense</button>
               <button onClick={() => setShowBill(true)}>
@@ -165,7 +184,7 @@ export default function GroupPage({ user }) {
                   {row.from_user === user.id ? 'You' : row.from_name}
                   {' paid '}
                   {row.to_user === user.id ? 'you' : row.to_name}
-                  {' '}<strong>{fmt(row.amount)}</strong>
+                  {' '}<strong>{fmt(row.amount, row.currency)}</strong>
                 </span>
                 <span className="pill">payment</span>
               </div>
@@ -182,9 +201,9 @@ export default function GroupPage({ user }) {
                     </div>
                   </div>
                   <div className="row">
-                    <strong>{fmt(row.amount)}</strong>
-                    <button className="secondary" onClick={(e) => { e.stopPropagation(); setEditExpense(exp); setShowExpense(true) }}>Edit</button>
-                    <button className="danger" onClick={(e) => { e.stopPropagation(); removeExpense(exp) }}>✕</button>
+                    <strong>{fmt(row.amount, row.currency)}</strong>
+                    <button className="secondary" onClick={(e) => { e.stopPropagation(); setEditExpense(row); setShowExpense(true) }}>Edit</button>
+                    <button className="danger" onClick={(e) => { e.stopPropagation(); removeExpense(row) }}>✕</button>
                   </div>
                 </div>
                 {expanded === row.id && (
@@ -197,7 +216,7 @@ export default function GroupPage({ user }) {
                             <tr key={it.id}>
                               <td>{it.name}</td>
                               <td>{it.quantity}{it.unit === 'kg' ? ' kg' : it.unit === 'x' ? '×' : ''}</td>
-                              <td>{fmt(it.total)}</td>
+                              <td>{fmt(it.total, row.currency)}</td>
                               <td>{it.participants.map((p) => p.user_name).join(', ')}</td>
                             </tr>
                           ))}
@@ -207,7 +226,7 @@ export default function GroupPage({ user }) {
                     <div style={{ marginTop: 6 }}>
                       {row.splits.map((s) => (
                         <div key={s.user_id}>
-                          {s.user_name} owes <strong>{fmt(s.amount)}</strong>
+                          {s.user_name} owes <strong>{fmt(s.amount, row.currency)}</strong>
                           {s.user_id === row.paid_by && <span className="muted"> (paid)</span>}
                         </div>
                       ))}
@@ -221,29 +240,40 @@ export default function GroupPage({ user }) {
 
         {tab === 'balances' && (
           <>
-            {balances.map((b) => (
-              <div className="list-item" key={b.user_id}>
-                <span>{b.user_name}</span>
-                <span className={b.balance >= 0 ? 'pos' : 'neg'}>
-                  {b.balance >= 0 ? 'gets back ' : 'owes '}{fmt(Math.abs(b.balance))}
-                </span>
+            {byCurrency.map(({ currency, rows, transfers: tr }) => (
+              <div key={currency} className="ccy-block">
+                {byCurrency.length > 1 && (
+                  <h4 className="ccy-head">{currency}</h4>
+                )}
+                {rows.map((b) => (
+                  <div className="list-item" key={`${currency}-${b.user_id}`}>
+                    <span>{b.user_name}</span>
+                    <span className={b.balance >= 0 ? 'pos' : 'neg'}>
+                      {b.balance >= 0 ? 'gets back ' : 'owes '}
+                      {fmt(Math.abs(b.balance), currency)}
+                    </span>
+                  </div>
+                ))}
+                {tr.length > 0 && (
+                  <div className="settle-list">
+                    {tr.map((t, i) => (
+                      <div className="list-item" key={i}>
+                        <span>{t.from_name} → {t.to_name}</span>
+                        <strong>{fmt(t.amount, currency)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
-            <h3 style={{ marginTop: 18 }}>
-              Suggested settlements{' '}
-              <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
-                ({group.simplify_debts
-                  ? 'simplified across the group'
-                  : 'kept between the original payers'})
-              </span>
-            </h3>
-            {transfers.length === 0 && <p className="muted">All settled up.</p>}
-            {transfers.map((t, i) => (
-              <div className="list-item" key={i}>
-                <span>{t.from_name} → {t.to_name}</span>
-                <strong>{fmt(t.amount)}</strong>
-              </div>
-            ))}
+            <p className="muted">
+              Suggested settlements are shown under each currency
+              ({group.simplify_debts
+                ? 'simplified across the group'
+                : 'kept between the original payers'}).
+              Currencies are never netted against each other.
+            </p>
+            {byCurrency.length === 0 && <p className="muted">All settled up.</p>}
             {settlements.length > 0 && (
               <p className="muted" style={{ marginTop: 18 }}>
                 {settlements.length} payment{settlements.length === 1 ? '' : 's'} recorded —
@@ -253,7 +283,7 @@ export default function GroupPage({ user }) {
           </>
         )}
 
-        {tab === 'insights' && <Insights groupId={groupId} />}
+        {tab === 'insights' && <Insights groupId={groupId} baseCurrency={group.default_currency} />}
 
         {tab === 'whiteboard' && <Whiteboard groupId={groupId} user={user} />}
 

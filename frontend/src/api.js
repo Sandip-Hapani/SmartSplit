@@ -101,8 +101,14 @@ export const api = {
   undoActivity: (id, actId) =>
     request(`/api/groups/${id}/activity/${actId}/undo`, { method: 'POST' }),
 
-  groupStats: (id) => request(`/api/groups/${id}/stats`),
-  accountStats: () => request('/api/account/stats'),
+  currencies: () => request('/api/currencies'),
+  groupRates: (id) => request(`/api/groups/${id}/rates`),
+  pinRate: (id, body) => request(`/api/groups/${id}/rates`, { method: 'PUT', body }),
+  unpinRate: (id, base, quote) =>
+    request(`/api/groups/${id}/rates/${base}/${quote}`, { method: 'DELETE' }),
+  groupStats: (id, display) =>
+    request(`/api/groups/${id}/stats${display ? `?display=${display}` : ''}`),
+  accountStats: (display = 'EUR') => request(`/api/account/stats?display=${display}`),
 
   myActivity: () => request('/api/activity'),
 
@@ -133,4 +139,4 @@ export const api = {
   },
 }
 
-export const fmt = (n) => `€${(n ?? 0).toFixed(2)}`
+export { fmt, symbolOf } from './currency'

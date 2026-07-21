@@ -9,6 +9,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from .. import models
+from . import currency as fx
 
 MONTHS_BACK = 12
 
@@ -37,14 +38,29 @@ def my_group_ids(db: Session, user_id: int) -> list[int]:
     return [m.group_id for m in db.query(models.GroupMember).filter_by(user_id=user_id)]
 
 
-def build_stats(db: Session, group_ids: list[int], user_id: int, today: date | None = None) -> dict:
+def build_stats(db: Session, group_ids: list[int], user_id: int,
+                today: date | None = None, display: str = "EUR") -> dict:
     """Totals plus a month-by-month series.
 
     `total` is what the group spent; `mine` is this user's share of it, so the
     two are directly comparable on one axis.
     """
     today = today or date.today()
+    display = fx.normalize(display)
     expenses = _expenses_for(db, group_ids)
+    unconverted: set[str] = set()
+
+    def to_display(amount: float, code: str, gid: int) -> float:
+        """Totals need one number, so they are converted for display only.
+        Balances never are — see services/currency.py."""
+        code = fx.normalize(code)
+        if code == display:
+            return amount
+        converted = fx.convert(db, amount, code, display, gid)
+        if converted is None:
+            unconverted.add(code)
+            return 0.0
+        return converted
 
     this_key = _month_key(today)
     ly, lm = _shift(today.year, today.month, -1)
@@ -56,11 +72,13 @@ def build_stats(db: Session, group_ids: list[int], user_id: int, today: date | N
         key = _month_key(exp.date)
         b = buckets.setdefault(key, {"total": 0.0, "mine": 0.0, "count": 0})
         share = sum(s.amount for s in exp.splits if s.user_id == user_id)
-        b["total"] += exp.amount
-        b["mine"] += share
+        amt = to_display(exp.amount, exp.currency, exp.group_id)
+        mine = to_display(share, exp.currency, exp.group_id)
+        b["total"] += amt
+        b["mine"] += mine
         b["count"] += 1
-        all_total += exp.amount
-        all_mine += share
+        all_total += amt
+        all_mine += mine
 
     # a continuous run of months so the chart has no gaps
     series = []
@@ -80,8 +98,21 @@ def build_stats(db: Session, group_ids: list[int], user_id: int, today: date | N
     this_b = buckets.get(this_key, {"total": 0.0, "mine": 0.0, "count": 0})
     last_b = buckets.get(last_key, {"total": 0.0, "mine": 0.0, "count": 0})
 
+    by_currency: dict[str, dict[str, float]] = {}
+    for exp in expenses:
+        code = fx.normalize(exp.currency)
+        row = by_currency.setdefault(code, {"total": 0.0, "mine": 0.0})
+        row["total"] += exp.amount
+        row["mine"] += sum(s.amount for s in exp.splits if s.user_id == user_id)
+
     return {
-        "currency": "EUR",
+        "currency": display,
+        "converted": sorted(by_currency) not in ([], [display]),
+        "unconverted": sorted(unconverted),
+        "by_currency": [
+            {"currency": c, "total": round(v["total"], 2), "mine": round(v["mine"], 2)}
+            for c, v in sorted(by_currency.items())
+        ],
         "expense_count": len(expenses),
         "all_time_total": round(all_total, 2),
         "all_time_mine": round(all_mine, 2),
@@ -169,8 +200,10 @@ def expenses_csv(db: Session, group_ids: list[int], user_id: int,
     writer.writerow(lead + ["Description", "Category", "Cost", "Currency"] + headers)
     writer.writerow([])  # Splitwise leaves this blank line under the header
 
-    totals = {uid: 0.0 for uid in people}
-    currency = "EUR"
+    totals: dict[str, dict[int, float]] = {}
+    currency = fx.normalize(
+        db.get(models.Group, group_ids[0]).default_currency if group_ids else "EUR"
+    )
 
     rows: list[tuple] = []
     for exp in expenses:
@@ -179,10 +212,9 @@ def expenses_csv(db: Session, group_ids: list[int], user_id: int,
             uid: (exp.amount if uid == exp.paid_by else 0.0) - owed.get(uid, 0.0)
             for uid in people
         }
-        currency = exp.currency or currency
         rows.append((
             exp.date, exp.id, exp.group_id, exp.description, "General",
-            exp.amount, exp.currency or "EUR", effect,
+            exp.amount, fx.normalize(exp.currency), effect,
         ))
 
     for s in settlements:
@@ -195,7 +227,7 @@ def expenses_csv(db: Session, group_ids: list[int], user_id: int,
             s.date, s.id, s.group_id,
             f"{short_name(payer.name if payer else '')} paid "
             f"{short_name(payee.name if payee else '')}",
-            "Payment", s.amount, currency, effect,
+            "Payment", s.amount, fx.normalize(s.currency), effect,
         ))
 
     rows.sort(key=lambda r: (r[0] or date.min, r[1]))
@@ -205,17 +237,21 @@ def expenses_csv(db: Session, group_ids: list[int], user_id: int,
         if with_group_column:
             line.append(group_names.get(gid, ""))
         line += [desc, category, _money(cost), cur]
+        bucket = totals.setdefault(cur, {u: 0.0 for u in people})
         for uid in people:
             v = round(effect.get(uid, 0.0), 2)
-            totals[uid] += v
+            bucket[uid] += v
             line.append(_money(v))
         writer.writerow(line)
 
+    # One closing line per currency — they are never netted together.
     writer.writerow([])
-    closing = [today.isoformat()]
-    if with_group_column:
-        closing.append(" ")
-    closing += ["Total balance", " ", " ", currency]
-    closing += [_money(round(totals[uid], 2)) for uid in people]
-    writer.writerow(closing)
+    for cur in sorted(totals) or [currency]:
+        bucket = totals.get(cur, {u: 0.0 for u in people})
+        closing = [today.isoformat()]
+        if with_group_column:
+            closing.append(" ")
+        closing += ["Total balance", " ", " ", cur]
+        closing += [_money(round(bucket[uid], 2)) for uid in people]
+        writer.writerow(closing)
     return buf.getvalue()

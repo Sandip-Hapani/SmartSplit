@@ -95,8 +95,9 @@ def update_profile(payload: schemas.ProfileUpdate,
 
 @router.get("/stats", response_model=schemas.SpendStats,
             summary="Spending totals and a 12-month series across every group")
-def account_stats(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return reports.build_stats(db, reports.my_group_ids(db, user.id), user.id)
+def account_stats(display: str = "EUR", user: models.User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    return reports.build_stats(db, reports.my_group_ids(db, user.id), user.id, display=display)
 
 
 @router.get("/expenses.csv", response_class=PlainTextResponse,

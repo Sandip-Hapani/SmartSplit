@@ -9,7 +9,8 @@ from ..auth import get_current_user, require_membership
 from ..database import get_db
 from ..services import reports
 from ..services.history import UNDOABLE, log, undo
-from ..services.simplify import compute_balances, direct_debts, simplify_debts
+from ..services import currency as fx
+from ..services.simplify import compute_balances, transfers_for
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -18,7 +19,8 @@ def _group_out(db: Session, group: models.Group) -> schemas.GroupOut:
     members = [schemas.UserOut.model_validate(m.user) for m in group.members]
     return schemas.GroupOut(
         id=group.id, name=group.name, created_by=group.created_by,
-        simplify_debts=group.simplify_debts, members=members,
+        simplify_debts=group.simplify_debts, default_currency=group.default_currency,
+        members=members,
     )
 
 
@@ -41,7 +43,8 @@ def my_groups(user: models.User = Depends(get_current_user), db: Session = Depen
 @router.post("", response_model=schemas.GroupOut)
 def create_group(payload: schemas.GroupCreate, user: models.User = Depends(get_current_user),
                  db: Session = Depends(get_db)):
-    group = models.Group(name=payload.name, created_by=user.id)
+    group = models.Group(name=payload.name, created_by=user.id,
+                         default_currency=fx.normalize(payload.default_currency))
     db.add(group)
     db.flush()
     db.add(models.GroupMember(group_id=group.id, user_id=user.id))
@@ -67,6 +70,14 @@ def update_group(group_id: int, payload: schemas.GroupUpdate,
         group.name = payload.name.strip()
         log(db, group_id, user.id, "group_renamed",
             f'{user.name} renamed the group from "{old}" to "{group.name}"')
+    if payload.default_currency is not None:
+        code = fx.normalize(payload.default_currency, "")
+        if not code:
+            raise HTTPException(400, "Unsupported currency")
+        if code != group.default_currency:
+            group.default_currency = code
+            log(db, group_id, user.id, "group_settings",
+                f"{user.name} set the group currency to {code}")
     if payload.simplify_debts is not None and payload.simplify_debts != group.simplify_debts:
         group.simplify_debts = payload.simplify_debts
         state = "on" if payload.simplify_debts else "off"
@@ -102,61 +113,79 @@ def add_member(group_id: int, payload: schemas.AddMember,
     return _group_out(db, group)
 
 
-@router.get("/{group_id}/balances", response_model=list[schemas.BalanceOut])
+@router.get("/{group_id}/balances", response_model=list[schemas.BalanceOut],
+            summary="Net balance per member, per currency")
 def balances(group_id: int, user: models.User = Depends(get_current_user),
              db: Session = Depends(get_db)):
-    require_membership(db, group_id, user)
-    bals = compute_balances(db, group_id)
-    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(bals)).all()}
-    return [
-        schemas.BalanceOut(user_id=uid, user_name=users[uid].name, balance=bal)
-        for uid, bal in sorted(bals.items(), key=lambda x: -x[1])
-    ]
+    """Currencies are kept separate — someone can be owed EUR while owing CHF."""
+    group = require_membership(db, group_id, user)
+    per_currency = compute_balances(db, group_id)
+    ids = {uid for bal in per_currency.values() for uid in bal}
+    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(ids or {0})).all()}
+
+    out: list[schemas.BalanceOut] = []
+    for code in _currency_order(group, per_currency):
+        for uid, bal in sorted(per_currency[code].items(), key=lambda x: -x[1]):
+            if uid in users:
+                out.append(schemas.BalanceOut(user_id=uid, user_name=users[uid].name,
+                                              balance=bal, currency=code))
+    return out
+
+
+def _currency_order(group: models.Group, buckets: dict) -> list[str]:
+    """Group's own currency first, then the rest alphabetically."""
+    codes = sorted(buckets)
+    base = fx.normalize(group.default_currency)
+    return ([base] if base in codes else []) + [c for c in codes if c != base]
 
 
 @router.get("/{group_id}/simplify", response_model=list[schemas.TransferOut],
-            summary="Suggested payments, honouring the group's simplification setting")
+            summary="Suggested payments per currency, honouring the simplify setting")
 def simplify(group_id: int, user: models.User = Depends(get_current_user),
              db: Session = Depends(get_db)):
     group = require_membership(db, group_id, user)
-    bals = compute_balances(db, group_id)
-    # With simplification off, debts stay between the people who actually shared
-    # the expense instead of being netted across everyone.
-    transfers = simplify_debts(bals) if group.simplify_debts else direct_debts(db, group_id)
-    ids = set(bals) | {u for t in transfers for u in t[:2]}
-    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(ids)).all()}
+    per_currency = transfers_for(db, group)
+    ids = {u for rows in per_currency.values() for t in rows for u in t[:2]}
+    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(ids or {0})).all()}
     return [
         schemas.TransferOut(
-            from_user=f, from_name=users[f].name, to_user=t, to_name=users[t].name, amount=a
+            from_user=f, from_name=users[f].name, to_user=t, to_name=users[t].name,
+            amount=a, currency=code,
         )
-        for f, t, a in transfers
+        for code in _currency_order(group, per_currency)
+        for f, t, a in per_currency[code]
+        if f in users and t in users
     ]
 
 
 @router.post("/{group_id}/settlements", response_model=schemas.SettlementOut)
 def settle(group_id: int, payload: schemas.SettlementCreate,
            user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_membership(db, group_id, user)
+    group = require_membership(db, group_id, user)
     member_ids = {m.user_id for m in db.query(models.GroupMember).filter_by(group_id=group_id)}
     if payload.from_user not in member_ids or payload.to_user not in member_ids:
         raise HTTPException(400, "Both users must be group members")
     if payload.from_user == payload.to_user:
         raise HTTPException(400, "Cannot settle with yourself")
+    code = fx.normalize(payload.currency, group.default_currency)
     s = models.Settlement(
         group_id=group_id, from_user=payload.from_user, to_user=payload.to_user,
-        amount=payload.amount, **({"date": payload.date} if payload.date else {}),
+        amount=payload.amount, currency=code,
+        **({"date": payload.date} if payload.date else {}),
     )
     db.add(s)
     db.flush()
     users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_([s.from_user, s.to_user]))}
     log(db, group_id, user.id, "settlement",
-        f"{users[s.from_user].name} paid {users[s.to_user].name} €{s.amount:.2f}",
+        f"{users[s.from_user].name} paid {users[s.to_user].name} "
+        f"{fx.CURRENCIES[code][0]}{s.amount:.2f}",
         {"settlement_id": s.id})
     db.commit()
     db.refresh(s)
     return schemas.SettlementOut(
         id=s.id, from_user=s.from_user, from_name=users[s.from_user].name,
-        to_user=s.to_user, to_name=users[s.to_user].name, amount=s.amount, date=s.date,
+        to_user=s.to_user, to_name=users[s.to_user].name, amount=s.amount,
+        currency=s.currency, date=s.date,
     )
 
 
@@ -169,7 +198,8 @@ def list_settlements(group_id: int, user: models.User = Depends(get_current_user
               .order_by(models.Settlement.created_at.desc()).all()):
         out.append(schemas.SettlementOut(
             id=s.id, from_user=s.from_user, from_name=s.payer.name,
-            to_user=s.to_user, to_name=s.payee.name, amount=s.amount, date=s.date,
+            to_user=s.to_user, to_name=s.payee.name, amount=s.amount,
+            currency=fx.normalize(s.currency), date=s.date,
         ))
     return out
 
@@ -201,10 +231,12 @@ def undo_activity(group_id: int, activity_id: int,
 
 @router.get("/{group_id}/stats", response_model=schemas.SpendStats,
             summary="Spending totals and a 12-month series for this group")
-def group_stats(group_id: int, user: models.User = Depends(get_current_user),
+def group_stats(group_id: int, display: str | None = None,
+                user: models.User = Depends(get_current_user),
                 db: Session = Depends(get_db)):
-    require_membership(db, group_id, user)
-    return reports.build_stats(db, [group_id], user.id)
+    group = require_membership(db, group_id, user)
+    return reports.build_stats(db, [group_id], user.id,
+                               display=display or group.default_currency)
 
 
 @router.get("/{group_id}/expenses.csv", response_class=PlainTextResponse,

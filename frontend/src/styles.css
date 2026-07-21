@@ -430,3 +430,18 @@ button.ghost.danger { color: var(--red); }
 .payment-row .pill { background: transparent; color: var(--tone-money); }
 .expense-row .ex-main { flex: 1; min-width: 0; }
 .expense-row { gap: 10px; }
+
+/* --------------------------------------------------------------- currency */
+.amount-row { display: flex; gap: 8px; }
+.amount-row input { flex: 1; }
+.ccy-select { min-width: 96px; }
+.ccy-block + .ccy-block { margin-top: 18px; }
+.ccy-head {
+  margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  color: var(--muted); text-transform: uppercase;
+}
+.settle-list { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.setting-block { border-top: 1px solid var(--line); padding-top: 14px; }
+.rate-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; font-size: 14px; }
+.rate-row input { width: 110px; }
+.pill.pinned { background: var(--tone-edit-bg); color: var(--tone-edit); }

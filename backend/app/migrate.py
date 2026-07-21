@@ -23,6 +23,13 @@ ADDITIONS = {
     },
     "groups": {
         "simplify_debts": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "default_currency": "VARCHAR(3) NOT NULL DEFAULT 'EUR'",
+    },
+    "settlements": {
+        "currency": "VARCHAR(3) NOT NULL DEFAULT 'EUR'",
+    },
+    "recurring_expenses": {
+        "currency": "VARCHAR(3) NOT NULL DEFAULT 'EUR'",
     },
     "activities": {
         "payload": "TEXT",
